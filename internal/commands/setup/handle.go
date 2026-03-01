@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/example/wsl-backup/internal/apperr"
-	"github.com/example/wsl-backup/internal/config"
-	"github.com/example/wsl-backup/internal/prompt"
-	"github.com/example/wsl-backup/internal/restic"
-	"github.com/example/wsl-backup/internal/resticversion"
-	"github.com/example/wsl-backup/internal/system"
+	"github.com/jonathan-tyler/wsl-backup-restic/internal/apperr"
+	"github.com/jonathan-tyler/wsl-backup-restic/internal/config"
+	"github.com/jonathan-tyler/wsl-backup-restic/internal/prompt"
+	"github.com/jonathan-tyler/wsl-backup-restic/internal/restic"
+	"github.com/jonathan-tyler/wsl-backup-restic/internal/resticversion"
+	"github.com/jonathan-tyler/wsl-backup-restic/internal/system"
 )
 
 type ConfigLoader interface {

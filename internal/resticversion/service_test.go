@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/example/wsl-backup/internal/config"
+	"github.com/jonathan-tyler/wsl-backup-restic/internal/config"
 )
 
 func TestCheckCompatibleNoActionWhenMatching(t *testing.T) {

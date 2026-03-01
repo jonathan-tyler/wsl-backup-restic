@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/example/wsl-backup/internal/system"
+	"github.com/jonathan-tyler/wsl-backup-restic/internal/system"
 )
 
 func executeWindowsProfileBackup(ctx context.Context, resticArgs []string, exec system.Executor) error {

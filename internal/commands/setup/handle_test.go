@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/example/wsl-backup/internal/apperr"
-	"github.com/example/wsl-backup/internal/config"
+	"github.com/jonathan-tyler/wsl-backup-restic/internal/apperr"
+	"github.com/jonathan-tyler/wsl-backup-restic/internal/config"
 )
 
 type fakeLoader struct {

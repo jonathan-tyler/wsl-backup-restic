@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/example/wsl-backup/internal/prompt"
-	"github.com/example/wsl-backup/internal/system"
+	"github.com/jonathan-tyler/wsl-backup-restic/internal/prompt"
+	"github.com/jonathan-tyler/wsl-backup-restic/internal/system"
 )
 
 func checkWindowsCompatible(ctx context.Context, desiredVersion string, exec system.Executor) error {

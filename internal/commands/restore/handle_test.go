@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/example/wsl-backup/internal/apperr"
+	"github.com/jonathan-tyler/wsl-backup-restic/internal/apperr"
 )
 
 type fakeRunner struct {

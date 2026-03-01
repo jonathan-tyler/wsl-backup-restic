@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/example/wsl-backup/internal/cli"
+	"github.com/jonathan-tyler/wsl-backup-restic/internal/cli"
 )
 
 func main() {

@@ -40,6 +40,23 @@ backup restore /tmp/restore-target
 backup restore /tmp/restore-target --dry-run
 ```
 
+### Edge cases
+
+- `BACKUP_CONFIG` overrides config discovery and points directly to a config file.
+
+```sh
+BACKUP_CONFIG=/path/to/config.yaml backup setup
+BACKUP_CONFIG=/path/to/config.yaml backup run daily
+```
+
+- Missing rules behavior:
+  - Missing include rule file (`<profile>.include.<cadence>.txt`) fails fast.
+  - Missing exclude rule file (`<profile>.exclude.<cadence>.txt`) is allowed.
+  - Overlap across profiles in include or exclude rules fails fast.
+
+- `backup restore <target> --dry-run` passes `--dry-run` to `restic restore` and performs a non-writing preview restore.
+- Additional restore args are forwarded after `--dry-run` (for example include/exclude filters).
+
 - If installed through `wsl-sys-cli`, run the same commands as `sys backup ...`.
 
 ## Caveats

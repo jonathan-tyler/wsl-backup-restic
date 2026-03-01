@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/example/wsl-backup/internal/apperr"
-	"github.com/example/wsl-backup/internal/restic"
+	"github.com/jonathan-tyler/wsl-backup-restic/internal/apperr"
+	"github.com/jonathan-tyler/wsl-backup-restic/internal/restic"
 )
 
 type fakeRunner struct {

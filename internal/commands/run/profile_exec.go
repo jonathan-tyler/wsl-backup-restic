@@ -4,8 +4,8 @@ import (
 	"context"
 	"strings"
 
-	"github.com/example/wsl-backup/internal/restic"
-	"github.com/example/wsl-backup/internal/system"
+	"github.com/jonathan-tyler/wsl-backup-restic/internal/restic"
+	"github.com/jonathan-tyler/wsl-backup-restic/internal/system"
 )
 
 func executeProfileBackup(ctx context.Context, profileName string, resticArgs []string, runner restic.Executor, exec system.Executor) error {

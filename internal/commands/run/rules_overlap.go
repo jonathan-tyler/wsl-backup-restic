@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/example/wsl-backup/internal/config"
+	"github.com/jonathan-tyler/wsl-backup-restic/internal/config"
 )
 
 type readFileFunc func(string) ([]byte, error)

@@ -7,12 +7,12 @@ import (
 	"io"
 	"os"
 
-	"github.com/example/wsl-backup/internal/apperr"
-	"github.com/example/wsl-backup/internal/commands/restore"
-	"github.com/example/wsl-backup/internal/commands/run"
-	"github.com/example/wsl-backup/internal/commands/setup"
-	"github.com/example/wsl-backup/internal/platform"
-	"github.com/example/wsl-backup/internal/restic"
+	"github.com/jonathan-tyler/wsl-backup-restic/internal/apperr"
+	"github.com/jonathan-tyler/wsl-backup-restic/internal/commands/restore"
+	"github.com/jonathan-tyler/wsl-backup-restic/internal/commands/run"
+	"github.com/jonathan-tyler/wsl-backup-restic/internal/commands/setup"
+	"github.com/jonathan-tyler/wsl-backup-restic/internal/platform"
+	"github.com/jonathan-tyler/wsl-backup-restic/internal/restic"
 )
 
 func Main(args []string, stdout io.Writer, stderr io.Writer) int {

@@ -1,4 +1,4 @@
-module github.com/example/wsl-backup
+module github.com/jonathan-tyler/wsl-backup-restic
 
 go 1.23.0
 
