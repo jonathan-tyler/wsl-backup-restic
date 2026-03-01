@@ -20,7 +20,7 @@
         "type=volume,target=/home/developer/.cache",
         "type=volume,target=/home/developer/go",
         // Host WSL backup config dir bind-mounted for real config editing/testing.
-        "type=bind,source=${localEnv:HOME}/.config/backup,target=/home/developer/.config/backup",
+        "type=bind,source=${localEnv:HOME}/.config/wsl-backup,target=/home/developer/.config/wsl-backup",
         "type=bind,source=${localEnv:HOME}/.agents,target=${containerWorkspaceFolder}/.agents",
         // Use less restrictive agent allowances only inside dev containers
         "type=bind,source=${localEnv:HOME}/.agents/skills/dev-containers/assets/settings.json,target=/home/developer/.vscode-server/data/Machine/settings.json",

@@ -1,5 +1,5 @@
-# Copy to ~/.config/backup/config.yaml (WSL/Linux)
-# or %APPDATA%\backup\config.yaml (Windows).
+# Copy to ~/.config/wsl-backup/config.yaml (WSL/Linux)
+# or %APPDATA%\wsl-backup\config.yaml (Windows).
 #
 # This sample is used by the installer scaffold and as a starting point.
 # Daily runs can execute backups when config is present and valid.
