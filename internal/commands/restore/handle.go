@@ -14,7 +14,12 @@ func Handle(ctx context.Context, args []string, runner restic.Executor) error {
 
 	target := args[0]
 	resticArgs := []string{"restore", "latest", "--target", target}
-	resticArgs = append(resticArgs, args[1:]...)
+	if len(args) > 1 && args[1] == "--dry-run" {
+		resticArgs = append(resticArgs, "--dry-run")
+		resticArgs = append(resticArgs, args[2:]...)
+	} else {
+		resticArgs = append(resticArgs, args[1:]...)
+	}
 
 	return runner.Run(ctx, resticArgs...)
 }

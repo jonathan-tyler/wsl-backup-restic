@@ -44,3 +44,21 @@ func TestHandleBuildsResticArgs(t *testing.T) {
 		}
 	}
 }
+
+func TestHandleSupportsDryRun(t *testing.T) {
+	runner := &fakeRunner{}
+	err := Handle(context.Background(), []string{"/tmp/restore", "--dry-run", "--include", "*.txt"}, runner)
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+
+	want := []string{"restore", "latest", "--target", "/tmp/restore", "--dry-run", "--include", "*.txt"}
+	if len(runner.args) != len(want) {
+		t.Fatalf("expected %d args, got %d (%#v)", len(want), len(runner.args), runner.args)
+	}
+	for i := range want {
+		if runner.args[i] != want[i] {
+			t.Fatalf("arg[%d]: expected %q, got %q", i, want[i], runner.args[i])
+		}
+	}
+}

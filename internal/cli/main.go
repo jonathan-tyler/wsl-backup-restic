@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 
 	"github.com/example/wsl-backup/internal/apperr"
 	"github.com/example/wsl-backup/internal/commands/restore"
 	"github.com/example/wsl-backup/internal/commands/run"
+	"github.com/example/wsl-backup/internal/platform"
 	"github.com/example/wsl-backup/internal/restic"
 )
 
@@ -17,6 +19,7 @@ func Main(args []string, stdout io.Writer, stderr io.Writer) int {
 		Stdout: stdout,
 		Stderr: stderr,
 		Runner: restic.NewOSRunner(stdout, stderr),
+		Guard:  platform.NewWSLGuard(os.Getenv),
 	}
 
 	return r.Route(context.Background(), args)
@@ -26,6 +29,9 @@ type Router struct {
 	Stdout io.Writer
 	Stderr io.Writer
 	Runner restic.Executor
+	Guard  interface{ Validate() error }
+	Run    func(context.Context, []string, restic.Executor) error
+	Restore func(context.Context, []string, restic.Executor) error
 }
 
 func (r Router) Route(ctx context.Context, args []string) int {
@@ -39,12 +45,30 @@ func (r Router) Route(ctx context.Context, args []string) int {
 		printUsage(r.Stdout)
 		return 0
 	case "run":
-		if err := run.Handle(ctx, args[1:], r.Runner); err != nil {
+		runHandler := r.Run
+		if runHandler == nil {
+			runHandler = run.Handle
+		}
+		if r.Guard != nil {
+			if err := r.Guard.Validate(); err != nil {
+				return r.renderError(err)
+			}
+		}
+		if err := runHandler(ctx, args[1:], r.Runner); err != nil {
 			return r.renderError(err)
 		}
 		return 0
 	case "restore":
-		if err := restore.Handle(ctx, args[1:], r.Runner); err != nil {
+		restoreHandler := r.Restore
+		if restoreHandler == nil {
+			restoreHandler = restore.Handle
+		}
+		if r.Guard != nil {
+			if err := r.Guard.Validate(); err != nil {
+				return r.renderError(err)
+			}
+		}
+		if err := restoreHandler(ctx, args[1:], r.Runner); err != nil {
 			return r.renderError(err)
 		}
 		return 0

@@ -3,10 +3,12 @@ package cli
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/example/wsl-backup/internal/apperr"
+	"github.com/example/wsl-backup/internal/restic"
 )
 
 type fakeRunner struct {
@@ -67,7 +69,9 @@ func TestRouteRunDispatchesToRunner(t *testing.T) {
 	var stdout strings.Builder
 	var stderr strings.Builder
 	runner := &fakeRunner{}
-	r := Router{Stdout: &stdout, Stderr: &stderr, Runner: runner}
+	r := Router{Stdout: &stdout, Stderr: &stderr, Runner: runner, Run: func(ctx context.Context, args []string, execRunner restic.Executor) error {
+		return execRunner.Run(ctx, "backup", "--tag", "cadence=daily")
+	}}
 
 	code := r.Route(context.Background(), []string{"run", "daily", "/tmp/source"})
 	if code != 0 {
@@ -85,7 +89,9 @@ func TestRouteRestoreDispatchesToRunner(t *testing.T) {
 	var stdout strings.Builder
 	var stderr strings.Builder
 	runner := &fakeRunner{}
-	r := Router{Stdout: &stdout, Stderr: &stderr, Runner: runner}
+	r := Router{Stdout: &stdout, Stderr: &stderr, Runner: runner, Restore: func(ctx context.Context, args []string, execRunner restic.Executor) error {
+		return execRunner.Run(ctx, "restore", "latest", "--target", "/tmp/restore")
+	}}
 
 	code := r.Route(context.Background(), []string{"restore", "/tmp/restore"})
 	if code != 0 {
@@ -103,7 +109,9 @@ func TestRouteUsageErrorsReturnExitCode2(t *testing.T) {
 	var stdout strings.Builder
 	var stderr strings.Builder
 	runner := &fakeRunner{err: apperr.UsageError{Message: "bad usage"}}
-	r := Router{Stdout: &stdout, Stderr: &stderr, Runner: runner}
+	r := Router{Stdout: &stdout, Stderr: &stderr, Runner: runner, Run: func(ctx context.Context, args []string, execRunner restic.Executor) error {
+		return execRunner.Run(ctx, "backup")
+	}}
 
 	code := r.Route(context.Background(), []string{"run", "daily"})
 	if code != 2 {
@@ -115,10 +123,38 @@ func TestRouteRuntimeErrorsReturnExitCode1(t *testing.T) {
 	var stdout strings.Builder
 	var stderr strings.Builder
 	runner := &fakeRunner{err: errors.New("boom")}
-	r := Router{Stdout: &stdout, Stderr: &stderr, Runner: runner}
+	r := Router{Stdout: &stdout, Stderr: &stderr, Runner: runner, Run: func(ctx context.Context, args []string, execRunner restic.Executor) error {
+		return execRunner.Run(ctx, "backup")
+	}}
 
 	code := r.Route(context.Background(), []string{"run", "daily", "/tmp/data"})
 	if code != 1 {
 		t.Fatalf("expected exit code 1, got %d", code)
+	}
+}
+
+type fakeGuard struct{ err error }
+
+func (g fakeGuard) Validate() error { return g.err }
+
+func TestRouteRejectsUnsupportedEnvironment(t *testing.T) {
+	var stdout strings.Builder
+	var stderr strings.Builder
+	r := Router{
+		Stdout: &stdout,
+		Stderr: &stderr,
+		Runner: &fakeRunner{},
+		Guard:  fakeGuard{err: fmt.Errorf("not wsl")},
+		Run: func(ctx context.Context, args []string, execRunner restic.Executor) error {
+			return nil
+		},
+	}
+
+	code := r.Route(context.Background(), []string{"run", "daily"})
+	if code != 1 {
+		t.Fatalf("expected exit code 1, got %d", code)
+	}
+	if !strings.Contains(stderr.String(), "not wsl") {
+		t.Fatalf("expected environment error output")
 	}
 }
