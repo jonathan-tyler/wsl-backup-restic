@@ -1,4 +1,4 @@
-package run
+package resticversion
 
 import (
 	"context"
@@ -44,40 +44,53 @@ func buildCmdKey(name string, args ...string) string {
 	return name + " " + strings.Join(args, " ")
 }
 
-func TestSyncResticVersionsNoActionWhenMatching(t *testing.T) {
+func TestCheckCompatibleNoActionWhenMatching(t *testing.T) {
 	exec := &fakeSystemExecutor{
 		captureOutput: map[string]string{
-			"restic version":                                             "restic 0.18.1 compiled with go1.24",
+			"restic version":                             "restic 0.18.1 compiled with go1.24",
 			"powershell.exe -NoProfile -Command restic version": "restic 0.18.1 compiled with go1.24",
 		},
 		captureErr: map[string]error{},
 		runErr:     map[string]error{},
 	}
 
-	confirmCalls := 0
-	err := syncResticVersions(context.Background(), config.File{
+	err := CheckCompatible(context.Background(), config.File{
 		ResticVersion: "0.18.1",
 		Profiles: map[string]config.Profile{
 			"wsl":     {Repository: "/repo/wsl"},
 			"windows": {Repository: `C:\repo`},
 		},
-	}, exec, func(string) (bool, error) {
-		confirmCalls++
-		return true, nil
-	})
+	}, exec)
 
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
-	}
-	if confirmCalls != 0 {
-		t.Fatalf("expected no confirmation prompts, got %d", confirmCalls)
 	}
 	if len(exec.runCalls) != 0 {
 		t.Fatalf("expected no install/update calls, got %v", exec.runCalls)
 	}
 }
 
-func TestSyncWSLInstallsWhenMissingAndApproved(t *testing.T) {
+func TestCheckCompatibleFailsWithSetupHintOnMismatch(t *testing.T) {
+	exec := &fakeSystemExecutor{
+		captureOutput: map[string]string{
+			"restic version": "restic 0.17.3 compiled with go1.24",
+		},
+	}
+
+	err := CheckCompatible(context.Background(), config.File{
+		ResticVersion: "0.18.1",
+		Profiles:      map[string]config.Profile{"wsl": {Repository: "/repo/wsl"}},
+	}, exec)
+
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+	if !strings.Contains(err.Error(), "run backup setup") {
+		t.Fatalf("expected setup hint, got %v", err)
+	}
+}
+
+func TestSyncInteractiveInstallsWhenMissingAndApproved(t *testing.T) {
 	exec := &fakeSystemExecutor{
 		captureOutput: map[string]string{},
 		captureErr: map[string]error{
@@ -86,11 +99,9 @@ func TestSyncWSLInstallsWhenMissingAndApproved(t *testing.T) {
 		runErr: map[string]error{},
 	}
 
-	err := syncResticVersions(context.Background(), config.File{
+	err := SyncInteractive(context.Background(), config.File{
 		ResticVersion: "0.18.1",
-		Profiles: map[string]config.Profile{
-			"wsl": {Repository: "/repo/wsl"},
-		},
+		Profiles:      map[string]config.Profile{"wsl": {Repository: "/repo/wsl"}},
 	}, exec, func(string) (bool, error) {
 		return true, nil
 	})
@@ -106,7 +117,7 @@ func TestSyncWSLInstallsWhenMissingAndApproved(t *testing.T) {
 	}
 }
 
-func TestSyncWindowsUpdateDeclinedReturnsError(t *testing.T) {
+func TestSyncInteractiveWindowsUpdateDeclinedReturnsError(t *testing.T) {
 	exec := &fakeSystemExecutor{
 		captureOutput: map[string]string{
 			"powershell.exe -NoProfile -Command restic version": "restic 0.17.3 compiled with go1.24",
@@ -115,11 +126,9 @@ func TestSyncWindowsUpdateDeclinedReturnsError(t *testing.T) {
 		runErr:     map[string]error{},
 	}
 
-	err := syncResticVersions(context.Background(), config.File{
+	err := SyncInteractive(context.Background(), config.File{
 		ResticVersion: "0.18.1",
-		Profiles: map[string]config.Profile{
-			"windows": {Repository: `C:\repo`},
-		},
+		Profiles:      map[string]config.Profile{"windows": {Repository: `C:\repo`}},
 	}, exec, func(string) (bool, error) {
 		return false, nil
 	})

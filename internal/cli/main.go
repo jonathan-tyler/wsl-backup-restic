@@ -10,6 +10,7 @@ import (
 	"github.com/example/wsl-backup/internal/apperr"
 	"github.com/example/wsl-backup/internal/commands/restore"
 	"github.com/example/wsl-backup/internal/commands/run"
+	"github.com/example/wsl-backup/internal/commands/setup"
 	"github.com/example/wsl-backup/internal/platform"
 	"github.com/example/wsl-backup/internal/restic"
 )
@@ -31,6 +32,7 @@ type Router struct {
 	Runner restic.Executor
 	Guard  interface{ Validate() error }
 	Run    func(context.Context, []string, restic.Executor) error
+	Setup  func(context.Context, []string, restic.Executor) error
 	Restore func(context.Context, []string, restic.Executor) error
 }
 
@@ -55,6 +57,20 @@ func (r Router) Route(ctx context.Context, args []string) int {
 			}
 		}
 		if err := runHandler(ctx, args[1:], r.Runner); err != nil {
+			return r.renderError(err)
+		}
+		return 0
+	case "setup":
+		setupHandler := r.Setup
+		if setupHandler == nil {
+			setupHandler = setup.Handle
+		}
+		if r.Guard != nil {
+			if err := r.Guard.Validate(); err != nil {
+				return r.renderError(err)
+			}
+		}
+		if err := setupHandler(ctx, args[1:], r.Runner); err != nil {
 			return r.renderError(err)
 		}
 		return 0

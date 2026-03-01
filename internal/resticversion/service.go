@@ -1,4 +1,4 @@
-package run
+package resticversion
 
 import (
 	"context"
@@ -11,7 +11,28 @@ import (
 	"github.com/example/wsl-backup/internal/system"
 )
 
-func syncResticVersions(ctx context.Context, cfg config.File, exec system.Executor, confirm prompt.ConfirmFunc) error {
+func CheckCompatible(ctx context.Context, cfg config.File, exec system.Executor) error {
+	desiredVersion := strings.TrimSpace(cfg.ResticVersion)
+	if desiredVersion == "" {
+		return nil
+	}
+
+	if _, hasWSL := cfg.Profiles["wsl"]; hasWSL {
+		if err := checkWSLResticVersion(ctx, desiredVersion, exec); err != nil {
+			return err
+		}
+	}
+
+	if _, hasWindows := cfg.Profiles["windows"]; hasWindows {
+		if err := checkWindowsResticVersion(ctx, desiredVersion, exec); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func SyncInteractive(ctx context.Context, cfg config.File, exec system.Executor, confirm prompt.ConfirmFunc) error {
 	desiredVersion := strings.TrimSpace(cfg.ResticVersion)
 	if desiredVersion == "" {
 		return nil
@@ -32,6 +53,42 @@ func syncResticVersions(ctx context.Context, cfg config.File, exec system.Execut
 	return nil
 }
 
+func checkWSLResticVersion(ctx context.Context, desiredVersion string, exec system.Executor) error {
+	output, err := exec.RunCapture(ctx, "restic", "version")
+	if err != nil {
+		return fmt.Errorf("wsl restic is missing; run backup setup")
+	}
+
+	installedVersion, parseErr := parseResticVersion(output)
+	if parseErr != nil {
+		return fmt.Errorf("parse wsl restic version: %w", parseErr)
+	}
+
+	if installedVersion != desiredVersion {
+		return fmt.Errorf("wsl restic version mismatch: installed=%s required=%s; run backup setup", installedVersion, desiredVersion)
+	}
+
+	return nil
+}
+
+func checkWindowsResticVersion(ctx context.Context, desiredVersion string, exec system.Executor) error {
+	output, err := exec.RunCapture(ctx, "powershell.exe", "-NoProfile", "-Command", "restic version")
+	if err != nil {
+		return fmt.Errorf("windows restic is missing; run backup setup")
+	}
+
+	installedVersion, parseErr := parseResticVersion(output)
+	if parseErr != nil {
+		return fmt.Errorf("parse windows restic version: %w", parseErr)
+	}
+
+	if installedVersion != desiredVersion {
+		return fmt.Errorf("windows restic version mismatch: installed=%s required=%s; run backup setup", installedVersion, desiredVersion)
+	}
+
+	return nil
+}
+
 func syncWSLResticVersion(ctx context.Context, desiredVersion string, exec system.Executor, confirm prompt.ConfirmFunc) error {
 	output, err := exec.RunCapture(ctx, "restic", "version")
 	if err != nil {
@@ -40,14 +97,14 @@ func syncWSLResticVersion(ctx context.Context, desiredVersion string, exec syste
 			return confirmErr
 		}
 		if !approved {
-			return fmt.Errorf("WSL restic is required")
+			return fmt.Errorf("wsl restic is required")
 		}
 		return exec.Run(ctx, "sudo", "dnf", "install", "-y", "restic")
 	}
 
 	installedVersion, parseErr := parseResticVersion(output)
 	if parseErr != nil {
-		return fmt.Errorf("parse WSL restic version: %w", parseErr)
+		return fmt.Errorf("parse wsl restic version: %w", parseErr)
 	}
 
 	if installedVersion == desiredVersion {
@@ -59,7 +116,7 @@ func syncWSLResticVersion(ctx context.Context, desiredVersion string, exec syste
 		return confirmErr
 	}
 	if !approved {
-		return fmt.Errorf("WSL restic version mismatch: installed=%s required=%s", installedVersion, desiredVersion)
+		return fmt.Errorf("wsl restic version mismatch: installed=%s required=%s", installedVersion, desiredVersion)
 	}
 
 	return exec.Run(ctx, "sudo", "dnf", "upgrade", "-y", "restic")
@@ -80,7 +137,7 @@ func syncWindowsResticVersion(ctx context.Context, desiredVersion string, exec s
 
 	installedVersion, parseErr := parseResticVersion(output)
 	if parseErr != nil {
-		return fmt.Errorf("parse Windows restic version: %w", parseErr)
+		return fmt.Errorf("parse windows restic version: %w", parseErr)
 	}
 
 	if installedVersion == desiredVersion {

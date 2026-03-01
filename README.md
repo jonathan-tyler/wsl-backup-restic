@@ -21,12 +21,23 @@ Thin, predictable wrapper around `restic`, run from WSL and usable as a `wsl-sys
 
 - This CLI is WSL-only; run it from a WSL shell (not from native Windows or a Dev Container).
 
-```sh
-# Run wsl and windows profiles in parallel
-backup run <cadence>
+- `backup run` performs a fast preflight check and fails fast on missing/mismatched restic versions.
+- If preflight fails, run `backup setup` to install/upgrade `restic` across configured profiles.
 
-# Restore a backup to a target path
-backup restore <target>
+### Typical flow
+
+```sh
+# One-time (or when versions drift)
+backup setup
+
+# Regular operation
+backup run daily
+backup run weekly
+backup run monthly
+
+# Restore examples
+backup restore /tmp/restore-target
+backup restore /tmp/restore-target --dry-run
 ```
 
 - If installed through `wsl-sys-cli`, run the same commands as `sys backup ...`.

@@ -105,6 +105,32 @@ func TestRouteRestoreDispatchesToRunner(t *testing.T) {
 	}
 }
 
+func TestRouteSetupDispatchesHandler(t *testing.T) {
+	var stdout strings.Builder
+	var stderr strings.Builder
+	called := false
+	r := Router{
+		Stdout: &stdout,
+		Stderr: &stderr,
+		Runner: &fakeRunner{},
+		Setup: func(ctx context.Context, args []string, execRunner restic.Executor) error {
+			called = true
+			if len(args) != 0 {
+				t.Fatalf("expected empty args, got %#v", args)
+			}
+			return nil
+		},
+	}
+
+	code := r.Route(context.Background(), []string{"setup"})
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d", code)
+	}
+	if !called {
+		t.Fatalf("expected setup handler to be called")
+	}
+}
+
 func TestRouteUsageErrorsReturnExitCode2(t *testing.T) {
 	var stdout strings.Builder
 	var stderr strings.Builder

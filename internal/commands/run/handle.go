@@ -3,15 +3,14 @@ package run
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"sort"
 	"sync"
 
 	"github.com/example/wsl-backup/internal/apperr"
 	"github.com/example/wsl-backup/internal/config"
-	"github.com/example/wsl-backup/internal/prompt"
 	"github.com/example/wsl-backup/internal/restic"
+	"github.com/example/wsl-backup/internal/resticversion"
 	"github.com/example/wsl-backup/internal/system"
 )
 
@@ -25,7 +24,6 @@ type RunDependencies struct {
 	Loader  ConfigLoader
 	Stat    fileStatFunc
 	System  system.Executor
-	Confirm prompt.ConfirmFunc
 }
 
 func Handle(ctx context.Context, args []string, runner restic.Executor) error {
@@ -33,7 +31,6 @@ func Handle(ctx context.Context, args []string, runner restic.Executor) error {
 		Loader:  config.NewLoader(),
 		Stat:    os.Stat,
 		System:  system.NewOSExecutor(os.Stdout, os.Stderr),
-		Confirm: prompt.NewYesNoConfirm(os.Stdin, os.Stdout),
 	}
 
 	return HandleWith(ctx, args, runner, deps)
@@ -56,10 +53,7 @@ func HandleWith(ctx context.Context, args []string, runner restic.Executor, deps
 		deps.Stat = os.Stat
 	}
 	if deps.System == nil {
-		deps.System = system.NewOSExecutor(io.Discard, io.Discard)
-	}
-	if deps.Confirm == nil {
-		deps.Confirm = func(string) (bool, error) { return false, nil }
+		deps.System = system.NewOSExecutor(os.Stdout, os.Stderr)
 	}
 
 	cfg, err := deps.Loader.Load()
@@ -67,7 +61,7 @@ func HandleWith(ctx context.Context, args []string, runner restic.Executor, deps
 		return err
 	}
 
-	if err := syncResticVersions(ctx, cfg, deps.System, deps.Confirm); err != nil {
+	if err := resticversion.CheckCompatible(ctx, cfg, deps.System); err != nil {
 		return err
 	}
 
