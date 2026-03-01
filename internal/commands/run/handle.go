@@ -3,13 +3,16 @@ package run
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"sort"
 	"sync"
 
 	"github.com/example/wsl-backup/internal/apperr"
 	"github.com/example/wsl-backup/internal/config"
+	"github.com/example/wsl-backup/internal/prompt"
 	"github.com/example/wsl-backup/internal/restic"
+	"github.com/example/wsl-backup/internal/system"
 )
 
 type ConfigLoader interface {
@@ -18,11 +21,25 @@ type ConfigLoader interface {
 
 type fileStatFunc func(string) (os.FileInfo, error)
 
-func Handle(ctx context.Context, args []string, runner restic.Executor) error {
-	return HandleWith(ctx, args, runner, config.NewLoader(), os.Stat)
+type RunDependencies struct {
+	Loader  ConfigLoader
+	Stat    fileStatFunc
+	System  system.Executor
+	Confirm prompt.ConfirmFunc
 }
 
-func HandleWith(ctx context.Context, args []string, runner restic.Executor, loader ConfigLoader, stat fileStatFunc) error {
+func Handle(ctx context.Context, args []string, runner restic.Executor) error {
+	deps := RunDependencies{
+		Loader:  config.NewLoader(),
+		Stat:    os.Stat,
+		System:  system.NewOSExecutor(os.Stdout, os.Stderr),
+		Confirm: prompt.NewYesNoConfirm(os.Stdin, os.Stdout),
+	}
+
+	return HandleWith(ctx, args, runner, deps)
+}
+
+func HandleWith(ctx context.Context, args []string, runner restic.Executor, deps RunDependencies) error {
 	if len(args) == 0 {
 		return apperr.UsageError{Message: "missing cadence: expected one of daily, weekly, monthly"}
 	}
@@ -31,8 +48,26 @@ func HandleWith(ctx context.Context, args []string, runner restic.Executor, load
 	if !isValidCadence(cadence) {
 		return apperr.UsageError{Message: fmt.Sprintf("invalid cadence %q: expected one of daily, weekly, monthly", cadence)}
 	}
-	cfg, err := loader.Load()
+
+	if deps.Loader == nil {
+		deps.Loader = config.NewLoader()
+	}
+	if deps.Stat == nil {
+		deps.Stat = os.Stat
+	}
+	if deps.System == nil {
+		deps.System = system.NewOSExecutor(io.Discard, io.Discard)
+	}
+	if deps.Confirm == nil {
+		deps.Confirm = func(string) (bool, error) { return false, nil }
+	}
+
+	cfg, err := deps.Loader.Load()
 	if err != nil {
+		return err
+	}
+
+	if err := syncResticVersions(ctx, cfg, deps.System, deps.Confirm); err != nil {
 		return err
 	}
 
@@ -51,7 +86,7 @@ func HandleWith(ctx context.Context, args []string, runner restic.Executor, load
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			resticArgs, err := buildRunArgs(cfg.Dir(), profileName, profile, cadence, args[1:], stat)
+			resticArgs, err := buildRunArgs(cfg.Dir(), profileName, profile, cadence, args[1:], deps.Stat)
 			if err != nil {
 				errCh <- err
 				return

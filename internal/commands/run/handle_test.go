@@ -57,7 +57,7 @@ func withTempRules(t *testing.T, cadence string, includeProfiles []string, exclu
 }
 
 func TestHandleRequiresCadence(t *testing.T) {
-	err := HandleWith(context.Background(), nil, &fakeRunner{}, fakeLoader{}, os.Stat)
+	err := HandleWith(context.Background(), nil, &fakeRunner{}, RunDependencies{Loader: fakeLoader{}, Stat: os.Stat})
 	if err == nil {
 		t.Fatalf("expected error")
 	}
@@ -67,7 +67,7 @@ func TestHandleRequiresCadence(t *testing.T) {
 }
 
 func TestHandleRejectsUnknownCadence(t *testing.T) {
-	err := HandleWith(context.Background(), []string{"yearly"}, &fakeRunner{}, fakeLoader{}, os.Stat)
+	err := HandleWith(context.Background(), []string{"yearly"}, &fakeRunner{}, RunDependencies{Loader: fakeLoader{}, Stat: os.Stat})
 	if err == nil {
 		t.Fatalf("expected error")
 	}
@@ -87,7 +87,7 @@ func TestHandleRunsConfiguredProfiles(t *testing.T) {
 	}}
 	loader.cfgPathSetForTest(rulesDir)
 
-	err := HandleWith(context.Background(), []string{"weekly", "--one-file-system"}, runner, loader, os.Stat)
+	err := HandleWith(context.Background(), []string{"weekly", "--one-file-system"}, runner, RunDependencies{Loader: loader, Stat: os.Stat})
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
@@ -139,7 +139,7 @@ func TestHandleFailsWhenIncludeRulesMissing(t *testing.T) {
 	loader := fakeLoader{cfg: config.File{Profiles: map[string]config.Profile{"wsl": {Repository: "/repo/wsl"}}}}
 	loader.cfgPathSetForTest(rulesDir)
 
-	err := HandleWith(context.Background(), []string{"daily"}, runner, loader, os.Stat)
+	err := HandleWith(context.Background(), []string{"daily"}, runner, RunDependencies{Loader: loader, Stat: os.Stat})
 	if err == nil {
 		t.Fatalf("expected error")
 	}
@@ -149,7 +149,7 @@ func TestHandleFailsWhenIncludeRulesMissing(t *testing.T) {
 }
 
 func TestHandleFailsWhenLoaderFails(t *testing.T) {
-	err := HandleWith(context.Background(), []string{"daily"}, &fakeRunner{}, fakeLoader{err: fmt.Errorf("load fail")}, os.Stat)
+	err := HandleWith(context.Background(), []string{"daily"}, &fakeRunner{}, RunDependencies{Loader: fakeLoader{err: fmt.Errorf("load fail")}, Stat: os.Stat})
 	if err == nil {
 		t.Fatalf("expected error")
 	}
