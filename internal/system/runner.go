@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"strconv"
 	"strings"
 )
 
@@ -40,8 +39,8 @@ func (e OSExecutor) RunWithEnv(ctx context.Context, env map[string]string, name 
 		base := os.Environ()
 		cmd.Env = mergeEnv(base, env)
 	}
-	cmd.Stdout = e.stdout
-	cmd.Stderr = e.stderr
+	cmd.Stdout = dimWriter(e.stdout)
+	cmd.Stderr = dimWriter(e.stderr)
 
 	return cmd.Run()
 }
@@ -51,36 +50,11 @@ func (e OSExecutor) RunCapture(ctx context.Context, name string, args ...string)
 
 	cmd := commandContext(ctx, name, args...)
 	var buffer bytes.Buffer
-	cmd.Stdout = io.MultiWriter(e.stdout, &buffer)
-	cmd.Stderr = io.MultiWriter(e.stderr, &buffer)
+	cmd.Stdout = io.MultiWriter(dimWriter(e.stdout), &buffer)
+	cmd.Stderr = io.MultiWriter(dimWriter(e.stderr), &buffer)
 
 	err := cmd.Run()
 	return buffer.String(), err
-}
-
-func formatCommand(args []string) string {
-	if len(args) == 0 {
-		return ""
-	}
-
-	quoted := make([]string, 0, len(args))
-	for _, arg := range args {
-		if strings.ContainsAny(arg, " \t\n\"") {
-			quoted = append(quoted, strconv.Quote(arg))
-			continue
-		}
-		quoted = append(quoted, arg)
-	}
-
-	return strings.Join(quoted, " ")
-}
-
-func formatLine(name string, args []string) string {
-	command := formatCommand(args)
-	if command == "" {
-		return name
-	}
-	return name + " " + command
 }
 
 func mergeEnv(base []string, overrides map[string]string) []string {

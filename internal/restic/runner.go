@@ -34,6 +34,9 @@ func (r OSRunner) Run(ctx context.Context, args ...string) error {
 	if err != nil {
 		return err
 	}
+	if strings.TrimSpace(password) == "" {
+		return fmt.Errorf("restic password is empty")
+	}
 
 	fmt.Fprintf(r.stdout, "\n$ restic %s\n", formatCommand(args))
 

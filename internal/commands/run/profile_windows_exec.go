@@ -15,6 +15,8 @@ var loadWindowsProfilePassword = func(ctx context.Context) (string, error) {
 	return restic.LoadPassword(ctx, os.Stdout, os.Stderr)
 }
 
+var osCreateTemp = os.CreateTemp
+
 func executeWindowsProfileBackup(ctx context.Context, resticArgs []string, exec system.Executor) error {
 	convertedArgs, err := convertRuleFileArgsToWindows(ctx, resticArgs, exec)
 	if err != nil {
@@ -29,7 +31,54 @@ func executeWindowsProfileBackup(ctx context.Context, resticArgs []string, exec 
 		}
 	}
 
-	return exec.RunWithEnv(ctx, map[string]string{"RESTIC_PASSWORD": password}, "restic.exe", convertedArgs...)
+	if strings.TrimSpace(password) == "" {
+		return fmt.Errorf("restic password is empty")
+	}
+
+	passwordFile, cleanup, err := createWindowsPasswordFile(ctx, password, exec)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+
+	argsWithPassword := append([]string{"--password-file", passwordFile}, convertedArgs...)
+	return exec.Run(ctx, "restic.exe", argsWithPassword...)
+}
+
+func createWindowsPasswordFile(ctx context.Context, password string, exec system.Executor) (string, func(), error) {
+	file, err := osCreateTemp("", "wsl-backup-restic-password-*.txt")
+	if err != nil {
+		return "", func() {}, fmt.Errorf("create temporary password file: %w", err)
+	}
+
+	cleanup := func() {
+		_ = os.Remove(file.Name())
+	}
+
+	if _, err := file.WriteString(password + "\n"); err != nil {
+		_ = file.Close()
+		cleanup()
+		return "", func() {}, fmt.Errorf("write temporary password file: %w", err)
+	}
+
+	if err := file.Chmod(0o600); err != nil {
+		_ = file.Close()
+		cleanup()
+		return "", func() {}, fmt.Errorf("secure temporary password file permissions: %w", err)
+	}
+
+	if err := file.Close(); err != nil {
+		cleanup()
+		return "", func() {}, fmt.Errorf("close temporary password file: %w", err)
+	}
+
+	windowsPath, err := toWindowsPath(ctx, file.Name(), exec)
+	if err != nil {
+		cleanup()
+		return "", func() {}, err
+	}
+
+	return windowsPath, cleanup, nil
 }
 
 func convertRuleFileArgsToWindows(ctx context.Context, args []string, exec system.Executor) ([]string, error) {
