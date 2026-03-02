@@ -18,7 +18,9 @@ Commands:
 
 Environment:
   BACKUP_CONFIG                  Optional config file path override
-  WSL_BACKUP_KEEPASSXC_DATABASE  Optional KeepassXC database path override
-  WSL_BACKUP_KEEPASSXC_ENTRY     Optional KeepassXC entry override for restic password
+  RESTIC_PASSWORD                Restic password value (manual or scheduled use)
+  WSL_BACKUP_RESTIC_PASSWORD_FILE  Preferred password file path for wsl-backup
+  RESTIC_PASSWORD_FILE           Restic-compatible password file path
+  CREDENTIALS_DIRECTORY          systemd credentials directory (uses credential name restic_password)
 `)
 }

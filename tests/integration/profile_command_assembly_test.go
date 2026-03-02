@@ -92,11 +92,6 @@ func TestRunAssemblesProfileCommandsForWSLAndWindows(t *testing.T) {
 	writeRepositoryConfig(t, wslRepo)
 	writeRepositoryConfig(t, windowsRepo)
 
-	keepassDB := filepath.Join(t.TempDir(), "vault.kdbx")
-	if err := os.WriteFile(keepassDB, []byte("db"), 0o644); err != nil {
-		t.Fatalf("write keepass db: %v", err)
-	}
-
 	runner := &fakeRunner{}
 	exec := &fakeSystem{runCapture: map[string]string{}}
 
@@ -107,7 +102,6 @@ func TestRunAssemblesProfileCommandsForWSLAndWindows(t *testing.T) {
 
 	loader := fakeLoader{cfg: config.FileWithPathForTest(config.File{
 		ResticVersion: "0.18.1",
-		KeepassDB:     keepassDB,
 		Profiles: map[string]config.Profile{
 			"wsl":     {Repository: wslRepo},
 			"windows": {Repository: windowsRepo, UseFSSnapshot: true},

@@ -122,8 +122,6 @@ func TestLoadParsesConfig(t *testing.T) {
 				t.Fatalf("unexpected path: %s", path)
 			}
 			return []byte(`restic_version: "0.18.1"
-keepassxc_database: /tmp/vault.kdbx
-keepassxc_entry: restic/main
 profiles:
   wsl:
     repository: /repo/wsl
@@ -141,12 +139,6 @@ profiles:
 	}
 	if cfg.Profiles["wsl"].Repository != "/repo/wsl" {
 		t.Fatalf("unexpected repository")
-	}
-	if cfg.KeepassDB != "/tmp/vault.kdbx" {
-		t.Fatalf("unexpected keepass database: %q", cfg.KeepassDB)
-	}
-	if cfg.KeepassEntry != "restic/main" {
-		t.Fatalf("unexpected keepass entry: %q", cfg.KeepassEntry)
 	}
 }
 

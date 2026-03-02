@@ -1,170 +1,67 @@
 package restic
 
 import (
-	"context"
 	"fmt"
-	"io"
 	"os"
-	"os/exec"
 	"strings"
-	"sync"
-
-	"github.com/jonathan-tyler/wsl-backup-restic/internal/config"
-	"gopkg.in/yaml.v3"
 )
 
 const (
-	KeepassDatabaseEnv = "WSL_BACKUP_KEEPASSXC_DATABASE"
-	KeepassEntryEnv    = "WSL_BACKUP_KEEPASSXC_ENTRY"
+	ResticPasswordFileEnv      = "RESTIC_PASSWORD_FILE"
+	WSLBackupPasswordFileEnv   = "WSL_BACKUP_RESTIC_PASSWORD_FILE"
+	SystemdCredentialsDirEnv   = "CREDENTIALS_DIRECTORY"
+	SystemdResticPasswordCred  = "restic_password"
 )
 
-var commandLookPath = exec.LookPath
-
-type keepassCLICommand struct {
-	name string
-	args []string
-}
-
-var (
-	passwordCacheMu sync.Mutex
-	cachedPassword  string
-	hasPassword     bool
-)
-
-func loadResticPassword(ctx context.Context, stdout io.Writer, stderr io.Writer) (string, error) {
+func loadResticPassword() (string, error) {
 	if envPassword := strings.TrimSpace(os.Getenv("RESTIC_PASSWORD")); envPassword != "" {
 		return envPassword, nil
 	}
 
-	passwordCacheMu.Lock()
-	defer passwordCacheMu.Unlock()
-	if hasPassword {
-		return cachedPassword, nil
+	passwordFileCandidates := []string{
+		strings.TrimSpace(os.Getenv(WSLBackupPasswordFileEnv)),
+		strings.TrimSpace(os.Getenv(ResticPasswordFileEnv)),
 	}
 
-	database, entry, err := resolveKeepassLookupSettings()
-	if err != nil {
-		return "", err
+	if credentialsDir := strings.TrimSpace(os.Getenv(SystemdCredentialsDirEnv)); credentialsDir != "" {
+		passwordFileCandidates = append(passwordFileCandidates, credentialsDir+"/"+SystemdResticPasswordCred)
 	}
 
-	keepassCmd, err := resolveKeepassCLICommand()
-	if err != nil {
-		return "", err
+	for _, candidate := range passwordFileCandidates {
+		if candidate == "" {
+			continue
+		}
+		password, err := readPasswordFromFile(candidate)
+		if err != nil {
+			return "", err
+		}
+		if password != "" {
+			return password, nil
+		}
 	}
 
-	args := []string{"show", "-q", "-a", "Password", database, entry}
-	commandArgs := append(append([]string{}, keepassCmd.args...), args...)
-	printed := append([]string{keepassCmd.name}, commandArgs...)
-	fmt.Fprintf(stdout, "\n$ %s\n", formatCommand(printed))
-
-	cmd := commandContext(ctx, keepassCmd.name, commandArgs...)
-	cmd.Stdin = os.Stdin
-	cmd.Stderr = stderr
-
-	secret, err := cmd.Output()
-	if err != nil {
-		return "", fmt.Errorf("keepassxc-cli password lookup failed (is database unlocked?): %w", err)
-	}
-
-	password := strings.TrimSpace(string(secret))
-	if password == "" {
-		return "", fmt.Errorf("keepassxc-cli returned an empty password")
-	}
-
-	cachedPassword = password
-	hasPassword = true
-
-	return password, nil
+	return "", fmt.Errorf("restic password is not configured: set RESTIC_PASSWORD, %s, %s, or provide systemd credential %q", WSLBackupPasswordFileEnv, ResticPasswordFileEnv, SystemdResticPasswordCred)
 }
 
-func LoadPassword(ctx context.Context, stdout io.Writer, stderr io.Writer) (string, error) {
-	return loadResticPassword(ctx, stdout, stderr)
-}
-
-func CheckKeepassCLIAvailable() error {
-	_, err := resolveKeepassCLICommand()
+func CheckPasswordConfigured() error {
+	_, err := loadResticPassword()
 	return err
 }
 
-func resolveKeepassCLICommand() (keepassCLICommand, error) {
-	if _, err := commandLookPath("keepassxc-cli"); err == nil {
-		return keepassCLICommand{name: "keepassxc-cli"}, nil
-	}
-
-	if _, err := commandLookPath("flatpak"); err == nil {
-		return keepassCLICommand{
-			name: "flatpak",
-			args: []string{"run", "--command=keepassxc-cli", "org.keepassxc.KeePassXC"},
-		}, nil
-	}
-
-	return keepassCLICommand{}, fmt.Errorf("keepassxc-cli is not available in PATH and flatpak fallback is unavailable")
+func LoadPassword() (string, error) {
+	return loadResticPassword()
 }
 
-func resetPasswordCacheForTest() {
-	passwordCacheMu.Lock()
-	defer passwordCacheMu.Unlock()
-	cachedPassword = ""
-	hasPassword = false
-}
-
-func resolveKeepassLookupSettings() (string, string, error) {
-	envDatabase := strings.TrimSpace(os.Getenv(KeepassDatabaseEnv))
-	envEntry := strings.TrimSpace(os.Getenv(KeepassEntryEnv))
-	if envDatabase != "" && envEntry != "" {
-		return envDatabase, envEntry, nil
-	}
-
-	cfgDatabase, cfgEntry, err := loadKeepassLookupSettingsFromConfig()
-	if err != nil {
-		if envDatabase != "" || envEntry != "" {
-			return "", "", fmt.Errorf("unable to complete KeepassXC lookup settings from config: %w", err)
-		}
-		return "", "", fmt.Errorf("unable to load KeepassXC lookup settings from config: %w", err)
-	}
-
-	database := cfgDatabase
-	if envDatabase != "" {
-		database = envDatabase
-	}
-
-	entry := cfgEntry
-	if envEntry != "" {
-		entry = envEntry
-	}
-
-	if database == "" || entry == "" {
-		return "", "", fmt.Errorf(
-			"missing KeepassXC lookup settings: set keepassxc_database and keepassxc_entry in config, or set %s and %s",
-			KeepassDatabaseEnv,
-			KeepassEntryEnv,
-		)
-	}
-
-	return database, entry, nil
-}
-
-type keepassLookupConfig struct {
-	KeepassDB    string `yaml:"keepassxc_database"`
-	KeepassEntry string `yaml:"keepassxc_entry"`
-}
-
-func loadKeepassLookupSettingsFromConfig() (string, string, error) {
-	loader := config.NewLoader()
-	path, err := loader.ResolvePath()
-	if err != nil {
-		return "", "", err
-	}
-
+func readPasswordFromFile(path string) (string, error) {
 	content, err := os.ReadFile(path)
 	if err != nil {
-		return "", "", fmt.Errorf("read config %q: %w", path, err)
+		return "", fmt.Errorf("read restic password file %q: %w", path, err)
 	}
 
-	var cfg keepassLookupConfig
-	if err := yaml.Unmarshal(content, &cfg); err != nil {
-		return "", "", fmt.Errorf("parse config %q: %w", path, err)
+	password := strings.TrimSpace(string(content))
+	if password == "" {
+		return "", fmt.Errorf("restic password file %q is empty", path)
 	}
 
-	return strings.TrimSpace(cfg.KeepassDB), strings.TrimSpace(cfg.KeepassEntry), nil
+	return password, nil
 }

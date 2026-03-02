@@ -19,14 +19,13 @@ Thin, predictable wrapper around `restic`, run from WSL and usable as a `wsl-sys
 
 ## Authentication
 
-- Restic password is a hard requirement and is loaded from KeepassXC via `keepassxc-cli` for each restic command.
-- Required config options:
-  - `keepassxc_database` (path to `.kdbx` database)
-  - `keepassxc_entry` (entry name containing Password)
-- Optional environment overrides:
-  - `WSL_BACKUP_KEEPASSXC_DATABASE`
-  - `WSL_BACKUP_KEEPASSXC_ENTRY`
-- If lookup fails (including locked database), the command fails fast with an error.
+- Restic password is a hard requirement.
+- Supported password sources (first available wins):
+  - `RESTIC_PASSWORD` (direct value)
+  - `WSL_BACKUP_RESTIC_PASSWORD_FILE` (preferred password file path)
+  - `RESTIC_PASSWORD_FILE` (restic-compatible password file path)
+  - systemd credentials directory (`$CREDENTIALS_DIRECTORY/restic_password`)
+- If no valid password source is available, the command fails fast with an error.
 
 ## Usage
 
@@ -59,9 +58,8 @@ backup restore /tmp/restore-target --dry-run
 BACKUP_CONFIG=/path/to/config.yaml backup setup
 BACKUP_CONFIG=/path/to/config.yaml backup run daily
 
-# Optional KeepassXC overrides (config remains the default source)
-WSL_BACKUP_KEEPASSXC_DATABASE=/path/to/vault.kdbx \
-WSL_BACKUP_KEEPASSXC_ENTRY=restic/main \
+# Optional password file override
+WSL_BACKUP_RESTIC_PASSWORD_FILE=/path/to/restic-password.txt \
 BACKUP_CONFIG=/path/to/config.yaml \
 backup run daily
 ```

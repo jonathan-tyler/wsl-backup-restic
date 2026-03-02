@@ -19,7 +19,6 @@ func runPreflight(
 	cadence string,
 	profiles map[string]config.Profile,
 	stat fileStatFunc,
-	checkKeepassCLI func() error,
 	runner restic.Executor,
 	exec system.Executor,
 	confirm prompt.ConfirmFunc,
@@ -28,14 +27,8 @@ func runPreflight(
 		return err
 	}
 
-	if hasNonWindowsProfile(profiles) {
-		if checkKeepassCLI != nil {
-			if err := checkKeepassCLI(); err != nil {
-				return fmt.Errorf("keepassxc-cli check failed: %w", err)
-			}
-		}
-
-		if err := validateKeepassDatabaseExists(cfg, stat); err != nil {
+	if hasProfiles(profiles) {
+		if err := restic.CheckPasswordConfigured(); err != nil {
 			return err
 		}
 	}
@@ -71,29 +64,8 @@ func validateRuleFilesExist(configDir string, cadence string, profiles map[strin
 	return nil
 }
 
-func hasNonWindowsProfile(profiles map[string]config.Profile) bool {
-	for profileName := range profiles {
-		if !strings.EqualFold(profileName, "windows") {
-			return true
-		}
-	}
-	return false
-}
-
-func validateKeepassDatabaseExists(cfg config.File, stat fileStatFunc) error {
-	database := strings.TrimSpace(cfg.KeepassDB)
-	if database == "" {
-		return fmt.Errorf("missing keepassxc_database in config")
-	}
-
-	if _, err := stat(database); err != nil {
-		if os.IsNotExist(err) {
-			return fmt.Errorf("keepassxc database not found: %s", database)
-		}
-		return fmt.Errorf("keepassxc database check failed: %w", err)
-	}
-
-	return nil
+func hasProfiles(profiles map[string]config.Profile) bool {
+	return len(profiles) > 0
 }
 
 func ensureRepositoryReady(

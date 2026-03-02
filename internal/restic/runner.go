@@ -30,7 +30,7 @@ func (r OSRunner) Run(ctx context.Context, args ...string) error {
 		return fmt.Errorf("restic command requires at least one argument")
 	}
 
-	password, err := loadResticPassword(ctx, r.stdout, r.stderr)
+	password, err := loadResticPassword()
 	if err != nil {
 		return err
 	}

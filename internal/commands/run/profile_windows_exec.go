@@ -12,7 +12,8 @@ import (
 )
 
 var loadWindowsProfilePassword = func(ctx context.Context) (string, error) {
-	return restic.LoadPassword(ctx, os.Stdout, os.Stderr)
+	_ = ctx
+	return restic.LoadPassword()
 }
 
 var osCreateTemp = os.CreateTemp

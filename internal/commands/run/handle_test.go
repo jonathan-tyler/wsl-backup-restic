@@ -118,17 +118,6 @@ func withTempRepository(t *testing.T) string {
 	return dir
 }
 
-func withTempKeepassDB(t *testing.T) string {
-	t.Helper()
-
-	path := filepath.Join(t.TempDir(), "vault.kdbx")
-	if err := os.WriteFile(path, []byte("db"), 0o644); err != nil {
-		t.Fatalf("write keepass db: %v", err)
-	}
-
-	return path
-}
-
 func TestHandleRequiresCadence(t *testing.T) {
 	err := HandleWith(context.Background(), nil, &fakeRunner{}, RunDependencies{Loader: fakeLoader{}, Stat: os.Stat})
 	if err == nil {
@@ -155,14 +144,12 @@ func TestHandleRunsConfiguredProfiles(t *testing.T) {
 	rulesDir := withTempRules(t, "weekly", []string{"wsl", "windows"}, []string{"wsl", "windows"})
 	wslRepo := withTempRepository(t)
 	windowsRepo := withTempRepository(t)
-	keepassDB := withTempKeepassDB(t)
 	runner := &fakeRunner{}
 	fakeExec := &fakeSystem{
 		runCapture: map[string]string{},
 	}
 	loader := fakeLoader{cfg: config.File{
 		ResticVersion: "0.18.1",
-		KeepassDB:     keepassDB,
 		Profiles: map[string]config.Profile{
 			"windows": {Repository: windowsRepo, UseFSSnapshot: true},
 			"wsl":     {Repository: wslRepo, UseFSSnapshot: false},
@@ -230,11 +217,9 @@ func TestHandleRunsConfiguredProfiles(t *testing.T) {
 func TestHandleFailsWhenIncludeRulesMissing(t *testing.T) {
 	rulesDir := withTempRules(t, "daily", []string{}, []string{})
 	wslRepo := withTempRepository(t)
-	keepassDB := withTempKeepassDB(t)
 	runner := &fakeRunner{}
 	loader := fakeLoader{cfg: config.File{
-		KeepassDB: keepassDB,
-		Profiles:  map[string]config.Profile{"wsl": {Repository: wslRepo}},
+		Profiles: map[string]config.Profile{"wsl": {Repository: wslRepo}},
 	}}
 	loader.cfgPathSetForTest(rulesDir)
 
@@ -247,31 +232,31 @@ func TestHandleFailsWhenIncludeRulesMissing(t *testing.T) {
 	}
 }
 
-func TestHandleFailsWhenKeepassDatabaseMissing(t *testing.T) {
+func TestHandleFailsWhenPasswordMissing(t *testing.T) {
 	rulesDir := withTempRules(t, "daily", []string{"wsl"}, []string{"wsl"})
 	wslRepo := withTempRepository(t)
 	runner := &fakeRunner{}
 	loader := fakeLoader{cfg: config.File{
-		KeepassDB: filepath.Join(t.TempDir(), "missing.kdbx"),
-		Profiles:  map[string]config.Profile{"wsl": {Repository: wslRepo}},
+		Profiles: map[string]config.Profile{"wsl": {Repository: wslRepo}},
 	}}
 	loader.cfgPathSetForTest(rulesDir)
+	t.Setenv("RESTIC_PASSWORD", "")
 
 	err := HandleWith(context.Background(), []string{"daily"}, runner, RunDependencies{Loader: loader, Stat: os.Stat})
 	if err == nil {
 		t.Fatalf("expected error")
 	}
-	if !strings.Contains(err.Error(), "keepassxc database not found") {
+	if !strings.Contains(err.Error(), "restic password is not configured") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
 func TestHandleOffersRepositoryCreation(t *testing.T) {
+	t.Setenv("RESTIC_PASSWORD", "test-password")
+
 	rulesDir := withTempRules(t, "daily", []string{"wsl"}, []string{"wsl"})
-	keepassDB := withTempKeepassDB(t)
 	runner := &fakeRunner{}
 	loader := fakeLoader{cfg: config.File{
-		KeepassDB: keepassDB,
 		Profiles: map[string]config.Profile{
 			"wsl": {Repository: filepath.Join(t.TempDir(), "missing-repo")},
 		},

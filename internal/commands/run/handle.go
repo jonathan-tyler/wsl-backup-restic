@@ -26,7 +26,6 @@ type RunDependencies struct {
 	Stat    fileStatFunc
 	System  system.Executor
 	Confirm prompt.ConfirmFunc
-	CheckKeepassCLI func() error
 }
 
 func Handle(ctx context.Context, args []string, runner restic.Executor) error {
@@ -35,7 +34,6 @@ func Handle(ctx context.Context, args []string, runner restic.Executor) error {
 		Stat:    os.Stat,
 		System:  system.NewOSExecutor(os.Stdout, os.Stderr),
 		Confirm: prompt.NewYesNoConfirm(os.Stdin, os.Stdout),
-		CheckKeepassCLI: restic.CheckKeepassCLIAvailable,
 	}
 
 	return HandleWith(ctx, args, runner, deps)
@@ -63,9 +61,6 @@ func HandleWith(ctx context.Context, args []string, runner restic.Executor, deps
 	if deps.Confirm == nil {
 		deps.Confirm = func(string) (bool, error) { return false, nil }
 	}
-	if deps.CheckKeepassCLI == nil {
-		deps.CheckKeepassCLI = func() error { return nil }
-	}
 
 	cfg, err := deps.Loader.Load()
 	if err != nil {
@@ -80,7 +75,7 @@ func HandleWith(ctx context.Context, args []string, runner restic.Executor, deps
 		return err
 	}
 
-	if err := runPreflight(ctx, cfg, cadence, cfg.Profiles, deps.Stat, deps.CheckKeepassCLI, runner, deps.System, deps.Confirm); err != nil {
+	if err := runPreflight(ctx, cfg, cadence, cfg.Profiles, deps.Stat, runner, deps.System, deps.Confirm); err != nil {
 		return err
 	}
 

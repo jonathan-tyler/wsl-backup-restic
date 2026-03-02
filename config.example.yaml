@@ -5,8 +5,6 @@
 # Daily runs can execute backups when config is present and valid.
 
 restic_version: "0.18.1"
-keepassxc_database: /path/to/vault.kdbx
-keepassxc_entry: restic/main
 profiles:
   wsl:
     repository: /path/to/restic-repo
