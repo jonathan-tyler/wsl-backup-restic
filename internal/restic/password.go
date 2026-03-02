@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 
 	"github.com/jonathan-tyler/wsl-backup-restic/internal/config"
 	"gopkg.in/yaml.v3"
@@ -24,7 +25,23 @@ type keepassCLICommand struct {
 	args []string
 }
 
+var (
+	passwordCacheMu sync.Mutex
+	cachedPassword  string
+	hasPassword     bool
+)
+
 func loadResticPassword(ctx context.Context, stdout io.Writer, stderr io.Writer) (string, error) {
+	if envPassword := strings.TrimSpace(os.Getenv("RESTIC_PASSWORD")); envPassword != "" {
+		return envPassword, nil
+	}
+
+	passwordCacheMu.Lock()
+	defer passwordCacheMu.Unlock()
+	if hasPassword {
+		return cachedPassword, nil
+	}
+
 	database, entry, err := resolveKeepassLookupSettings()
 	if err != nil {
 		return "", err
@@ -38,9 +55,10 @@ func loadResticPassword(ctx context.Context, stdout io.Writer, stderr io.Writer)
 	args := []string{"show", "-q", "-a", "Password", database, entry}
 	commandArgs := append(append([]string{}, keepassCmd.args...), args...)
 	printed := append([]string{keepassCmd.name}, commandArgs...)
-	fmt.Fprintf(stdout, "$ %s\n", formatCommand(printed))
+	fmt.Fprintf(stdout, "\n$ %s\n", formatCommand(printed))
 
 	cmd := commandContext(ctx, keepassCmd.name, commandArgs...)
+	cmd.Stdin = os.Stdin
 	cmd.Stderr = stderr
 
 	secret, err := cmd.Output()
@@ -53,7 +71,14 @@ func loadResticPassword(ctx context.Context, stdout io.Writer, stderr io.Writer)
 		return "", fmt.Errorf("keepassxc-cli returned an empty password")
 	}
 
+	cachedPassword = password
+	hasPassword = true
+
 	return password, nil
+}
+
+func LoadPassword(ctx context.Context, stdout io.Writer, stderr io.Writer) (string, error) {
+	return loadResticPassword(ctx, stdout, stderr)
 }
 
 func CheckKeepassCLIAvailable() error {
@@ -74,6 +99,13 @@ func resolveKeepassCLICommand() (keepassCLICommand, error) {
 	}
 
 	return keepassCLICommand{}, fmt.Errorf("keepassxc-cli is not available in PATH and flatpak fallback is unavailable")
+}
+
+func resetPasswordCacheForTest() {
+	passwordCacheMu.Lock()
+	defer passwordCacheMu.Unlock()
+	cachedPassword = ""
+	hasPassword = false
 }
 
 func resolveKeepassLookupSettings() (string, string, error) {

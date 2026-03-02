@@ -35,7 +35,7 @@ func (r OSRunner) Run(ctx context.Context, args ...string) error {
 		return err
 	}
 
-	fmt.Fprintf(r.stdout, "$ restic %s\n", formatCommand(args))
+	fmt.Fprintf(r.stdout, "\n$ restic %s\n", formatCommand(args))
 
 	cmd := commandContext(ctx, "restic", args...)
 	baseEnv := cmd.Env

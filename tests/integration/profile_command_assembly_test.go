@@ -31,11 +31,23 @@ func (l fakeLoader) Load() (config.File, error) {
 
 type fakeSystem struct {
 	runCalls   [][]string
+	runWithEnv []map[string]string
 	runCapture map[string]string
 }
 
 func (s *fakeSystem) Run(_ context.Context, name string, args ...string) error {
 	s.runCalls = append(s.runCalls, append([]string{name}, args...))
+	s.runWithEnv = append(s.runWithEnv, map[string]string{})
+	return nil
+}
+
+func (s *fakeSystem) RunWithEnv(_ context.Context, env map[string]string, name string, args ...string) error {
+	s.runCalls = append(s.runCalls, append([]string{name}, args...))
+	envCopy := map[string]string{}
+	for key, value := range env {
+		envCopy[key] = value
+	}
+	s.runWithEnv = append(s.runWithEnv, envCopy)
 	return nil
 }
 
@@ -69,6 +81,8 @@ func writeRepositoryConfig(t *testing.T, dir string) {
 }
 
 func TestRunAssemblesProfileCommandsForWSLAndWindows(t *testing.T) {
+	t.Setenv("RESTIC_PASSWORD", "test-password")
+
 	rulesDir := t.TempDir()
 	writeRules(t, rulesDir, "wsl", "daily")
 	writeRules(t, rulesDir, "windows", "daily")

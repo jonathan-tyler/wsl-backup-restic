@@ -55,10 +55,44 @@ func TestOSExecutorRunEchoesCommandWithoutArgs(t *testing.T) {
 	}
 }
 
+func TestOSExecutorRunWithEnvEchoesCommand(t *testing.T) {
+	original := commandContext
+	commandContext = fakeExecCommand
+	t.Cleanup(func() {
+		commandContext = original
+	})
+
+	var stdout strings.Builder
+	var stderr strings.Builder
+	exec := NewOSExecutor(&stdout, &stderr)
+
+	err := exec.RunWithEnv(context.Background(), map[string]string{"RESTIC_PASSWORD": "secret"}, "restic", "snapshots")
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	if !strings.Contains(stdout.String(), "$ restic snapshots") {
+		t.Fatalf("expected echoed command")
+	}
+}
+
 func TestFormatCommandQuotesWhitespaceArgs(t *testing.T) {
 	formatted := formatCommand([]string{"backup", "--target", "/tmp/my folder"})
 	if formatted != "backup --target \"/tmp/my folder\"" {
 		t.Fatalf("unexpected formatted command: %q", formatted)
+	}
+}
+
+func TestMergeEnvReplacesExistingKeys(t *testing.T) {
+	merged := mergeEnv([]string{"A=1", "B=2"}, map[string]string{"B": "9", "C": "3"})
+	joined := strings.Join(merged, "|")
+	if strings.Contains(joined, "B=2") {
+		t.Fatalf("expected old B value to be replaced, got %v", merged)
+	}
+	if !strings.Contains(joined, "B=9") {
+		t.Fatalf("expected new B value, got %v", merged)
+	}
+	if !strings.Contains(joined, "C=3") {
+		t.Fatalf("expected C to be added, got %v", merged)
 	}
 }
 

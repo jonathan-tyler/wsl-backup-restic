@@ -3,11 +3,17 @@ package run
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/jonathan-tyler/wsl-backup-restic/internal/restic"
 	"github.com/jonathan-tyler/wsl-backup-restic/internal/system"
 )
+
+var loadWindowsProfilePassword = func(ctx context.Context) (string, error) {
+	return restic.LoadPassword(ctx, os.Stdout, os.Stderr)
+}
 
 func executeWindowsProfileBackup(ctx context.Context, resticArgs []string, exec system.Executor) error {
 	convertedArgs, err := convertRuleFileArgsToWindows(ctx, resticArgs, exec)
@@ -15,7 +21,15 @@ func executeWindowsProfileBackup(ctx context.Context, resticArgs []string, exec 
 		return err
 	}
 
-	return exec.Run(ctx, "restic.exe", convertedArgs...)
+	password := os.Getenv("RESTIC_PASSWORD")
+	if strings.TrimSpace(password) == "" {
+		password, err = loadWindowsProfilePassword(ctx)
+		if err != nil {
+			return err
+		}
+	}
+
+	return exec.RunWithEnv(ctx, map[string]string{"RESTIC_PASSWORD": password}, "restic.exe", convertedArgs...)
 }
 
 func convertRuleFileArgsToWindows(ctx context.Context, args []string, exec system.Executor) ([]string, error) {

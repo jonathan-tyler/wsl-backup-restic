@@ -30,6 +30,7 @@ type fakeLoader struct {
 
 type fakeSystem struct {
 	runCalls    [][]string
+	runWithEnv  []map[string]string
 	runCapture  map[string]string
 	runErr      map[string]error
 	captureErr  map[string]error
@@ -38,6 +39,23 @@ type fakeSystem struct {
 func (s *fakeSystem) Run(_ context.Context, name string, args ...string) error {
 	call := append([]string{name}, args...)
 	s.runCalls = append(s.runCalls, call)
+	s.runWithEnv = append(s.runWithEnv, map[string]string{})
+	if s.runErr != nil {
+		if err, ok := s.runErr[strings.Join(call, " ")]; ok {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *fakeSystem) RunWithEnv(_ context.Context, env map[string]string, name string, args ...string) error {
+	call := append([]string{name}, args...)
+	s.runCalls = append(s.runCalls, call)
+	envCopy := map[string]string{}
+	for key, value := range env {
+		envCopy[key] = value
+	}
+	s.runWithEnv = append(s.runWithEnv, envCopy)
 	if s.runErr != nil {
 		if err, ok := s.runErr[strings.Join(call, " ")]; ok {
 			return err
@@ -132,6 +150,8 @@ func TestHandleRejectsUnknownCadence(t *testing.T) {
 }
 
 func TestHandleRunsConfiguredProfiles(t *testing.T) {
+	t.Setenv("RESTIC_PASSWORD", "test-password")
+
 	rulesDir := withTempRules(t, "weekly", []string{"wsl", "windows"}, []string{"wsl", "windows"})
 	wslRepo := withTempRepository(t)
 	windowsRepo := withTempRepository(t)

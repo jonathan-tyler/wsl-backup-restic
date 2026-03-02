@@ -22,6 +22,10 @@ func (e *fakeSystemExecutor) Run(_ context.Context, name string, args ...string)
 	return nil
 }
 
+func (e *fakeSystemExecutor) RunWithEnv(ctx context.Context, _ map[string]string, name string, args ...string) error {
+	return e.Run(ctx, name, args...)
+}
+
 func (e *fakeSystemExecutor) RunCapture(_ context.Context, name string, args ...string) (string, error) {
 	key := buildCmdKey(name, args...)
 	if out, ok := e.captureOutput[key]; ok {

@@ -36,6 +36,10 @@ func (s fakeSystem) Run(_ context.Context, _ string, _ ...string) error {
 	return s.runErr
 }
 
+func (s fakeSystem) RunWithEnv(_ context.Context, _ map[string]string, _ string, _ ...string) error {
+	return s.runErr
+}
+
 func (s fakeSystem) RunCapture(_ context.Context, _ string, _ ...string) (string, error) {
 	return s.runCaptureOutput, s.runCaptureErr
 }

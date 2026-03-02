@@ -18,6 +18,7 @@ func TestFormatCommandQuotesWhitespace(t *testing.T) {
 }
 
 func TestOSRunnerPrintsCommandAndStreamsOutput(t *testing.T) {
+	resetPasswordCacheForTest()
 	original := commandContext
 	originalLookPath := commandLookPath
 	commandContext = fakeExecCommand
@@ -74,6 +75,7 @@ func TestOSRunnerRejectsEmptyArgs(t *testing.T) {
 }
 
 func TestOSRunnerReadsKeepassSettingsFromEnvOverrides(t *testing.T) {
+	resetPasswordCacheForTest()
 	original := commandContext
 	originalLookPath := commandLookPath
 	commandContext = fakeExecCommand
@@ -110,6 +112,7 @@ profiles:
 }
 
 func TestOSRunnerFailsWhenKeepassSettingsMissing(t *testing.T) {
+	resetPasswordCacheForTest()
 	original := commandContext
 	originalLookPath := commandLookPath
 	commandContext = fakeExecCommand
@@ -143,6 +146,7 @@ profiles:
 }
 
 func TestOSRunnerFailsWhenKeepassLookupFails(t *testing.T) {
+	resetPasswordCacheForTest()
 	original := commandContext
 	originalLookPath := commandLookPath
 	commandContext = fakeExecCommand
@@ -182,6 +186,7 @@ func TestWithResticPasswordReplacesExistingValue(t *testing.T) {
 }
 
 func TestOSRunnerFailsWhenKeepassReturnsEmptyPassword(t *testing.T) {
+	resetPasswordCacheForTest()
 	original := commandContext
 	originalLookPath := commandLookPath
 	commandContext = fakeExecCommand
@@ -209,6 +214,7 @@ func TestOSRunnerFailsWhenKeepassReturnsEmptyPassword(t *testing.T) {
 }
 
 func TestResolveKeepassLookupSettingsUsesConfig(t *testing.T) {
+	resetPasswordCacheForTest()
 	configPath := writeConfigFile(t, `restic_version: "0.18.1"
 keepassxc_database: /tmp/config-vault.kdbx
 keepassxc_entry: config/restic
@@ -231,6 +237,7 @@ profiles:
 }
 
 func TestOSRunnerUsesFlatpakFallbackForKeepassCLI(t *testing.T) {
+	resetPasswordCacheForTest()
 	original := commandContext
 	originalLookPath := commandLookPath
 	commandContext = fakeExecCommand

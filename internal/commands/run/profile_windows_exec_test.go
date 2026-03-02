@@ -8,6 +8,14 @@ import (
 )
 
 func TestExecuteWindowsProfileBackupRunsResticExe(t *testing.T) {
+	originalLoad := loadWindowsProfilePassword
+	loadWindowsProfilePassword = func(context.Context) (string, error) {
+		return "test-password", nil
+	}
+	t.Cleanup(func() {
+		loadWindowsProfilePassword = originalLoad
+	})
+
 	fakeExec := &fakeSystem{runCapture: map[string]string{}}
 	rulesDir := t.TempDir()
 
@@ -28,6 +36,12 @@ func TestExecuteWindowsProfileBackupRunsResticExe(t *testing.T) {
 	}
 	if !strings.Contains(joined, `C:\rules\windows.include.daily.txt`) {
 		t.Fatalf("expected converted path, got %v", fakeExec.runCalls[0])
+	}
+	if len(fakeExec.runWithEnv) != 1 {
+		t.Fatalf("expected one env call, got %d", len(fakeExec.runWithEnv))
+	}
+	if fakeExec.runWithEnv[0]["RESTIC_PASSWORD"] != "test-password" {
+		t.Fatalf("expected restic password env to be set")
 	}
 }
 
