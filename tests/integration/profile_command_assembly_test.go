@@ -60,10 +60,28 @@ func writeRules(t *testing.T, dir string, profile string, cadence string) {
 	}
 }
 
+func writeRepositoryConfig(t *testing.T, dir string) {
+	t.Helper()
+
+	if err := os.WriteFile(filepath.Join(dir, "config"), []byte("repo-config"), 0o644); err != nil {
+		t.Fatalf("write repository config: %v", err)
+	}
+}
+
 func TestRunAssemblesProfileCommandsForWSLAndWindows(t *testing.T) {
 	rulesDir := t.TempDir()
 	writeRules(t, rulesDir, "wsl", "daily")
 	writeRules(t, rulesDir, "windows", "daily")
+
+	wslRepo := t.TempDir()
+	windowsRepo := t.TempDir()
+	writeRepositoryConfig(t, wslRepo)
+	writeRepositoryConfig(t, windowsRepo)
+
+	keepassDB := filepath.Join(t.TempDir(), "vault.kdbx")
+	if err := os.WriteFile(keepassDB, []byte("db"), 0o644); err != nil {
+		t.Fatalf("write keepass db: %v", err)
+	}
 
 	runner := &fakeRunner{}
 	exec := &fakeSystem{runCapture: map[string]string{}}
@@ -75,9 +93,10 @@ func TestRunAssemblesProfileCommandsForWSLAndWindows(t *testing.T) {
 
 	loader := fakeLoader{cfg: config.FileWithPathForTest(config.File{
 		ResticVersion: "0.18.1",
+		KeepassDB:     keepassDB,
 		Profiles: map[string]config.Profile{
-			"wsl":     {Repository: "/repo/wsl"},
-			"windows": {Repository: `C:\repo`, UseFSSnapshot: true},
+			"wsl":     {Repository: wslRepo},
+			"windows": {Repository: windowsRepo, UseFSSnapshot: true},
 		},
 	}, filepath.Join(rulesDir, "config.yaml"))}
 

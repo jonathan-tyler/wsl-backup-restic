@@ -9,6 +9,7 @@ import (
 
 	"github.com/jonathan-tyler/wsl-backup-restic/internal/apperr"
 	"github.com/jonathan-tyler/wsl-backup-restic/internal/config"
+	"github.com/jonathan-tyler/wsl-backup-restic/internal/prompt"
 	"github.com/jonathan-tyler/wsl-backup-restic/internal/restic"
 	"github.com/jonathan-tyler/wsl-backup-restic/internal/resticversion"
 	"github.com/jonathan-tyler/wsl-backup-restic/internal/system"
@@ -24,6 +25,8 @@ type RunDependencies struct {
 	Loader  ConfigLoader
 	Stat    fileStatFunc
 	System  system.Executor
+	Confirm prompt.ConfirmFunc
+	CheckKeepassCLI func() error
 }
 
 func Handle(ctx context.Context, args []string, runner restic.Executor) error {
@@ -31,6 +34,8 @@ func Handle(ctx context.Context, args []string, runner restic.Executor) error {
 		Loader:  config.NewLoader(),
 		Stat:    os.Stat,
 		System:  system.NewOSExecutor(os.Stdout, os.Stderr),
+		Confirm: prompt.NewYesNoConfirm(os.Stdin, os.Stdout),
+		CheckKeepassCLI: restic.CheckKeepassCLIAvailable,
 	}
 
 	return HandleWith(ctx, args, runner, deps)
@@ -55,6 +60,12 @@ func HandleWith(ctx context.Context, args []string, runner restic.Executor, deps
 	if deps.System == nil {
 		deps.System = system.NewOSExecutor(os.Stdout, os.Stderr)
 	}
+	if deps.Confirm == nil {
+		deps.Confirm = func(string) (bool, error) { return false, nil }
+	}
+	if deps.CheckKeepassCLI == nil {
+		deps.CheckKeepassCLI = func() error { return nil }
+	}
 
 	cfg, err := deps.Loader.Load()
 	if err != nil {
@@ -66,6 +77,10 @@ func HandleWith(ctx context.Context, args []string, runner restic.Executor, deps
 	}
 
 	if err := validateIncludeRuleOverlap(cfg.Dir(), cadence, cfg.Profiles, os.ReadFile); err != nil {
+		return err
+	}
+
+	if err := runPreflight(ctx, cfg, cadence, cfg.Profiles, deps.Stat, deps.CheckKeepassCLI, runner, deps.System, deps.Confirm); err != nil {
 		return err
 	}
 

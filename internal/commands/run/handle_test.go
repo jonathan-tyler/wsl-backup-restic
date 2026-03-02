@@ -89,6 +89,28 @@ func withTempRules(t *testing.T, cadence string, includeProfiles []string, exclu
 	return dir
 }
 
+func withTempRepository(t *testing.T) string {
+	t.Helper()
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "config"), []byte("repo-config"), 0o644); err != nil {
+		t.Fatalf("write repo config: %v", err)
+	}
+
+	return dir
+}
+
+func withTempKeepassDB(t *testing.T) string {
+	t.Helper()
+
+	path := filepath.Join(t.TempDir(), "vault.kdbx")
+	if err := os.WriteFile(path, []byte("db"), 0o644); err != nil {
+		t.Fatalf("write keepass db: %v", err)
+	}
+
+	return path
+}
+
 func TestHandleRequiresCadence(t *testing.T) {
 	err := HandleWith(context.Background(), nil, &fakeRunner{}, RunDependencies{Loader: fakeLoader{}, Stat: os.Stat})
 	if err == nil {
@@ -110,16 +132,20 @@ func TestHandleRejectsUnknownCadence(t *testing.T) {
 }
 
 func TestHandleRunsConfiguredProfiles(t *testing.T) {
-	rulesDir := withTempRules(t, "weekly", []string{"wsl", "windows"}, []string{"windows"})
+	rulesDir := withTempRules(t, "weekly", []string{"wsl", "windows"}, []string{"wsl", "windows"})
+	wslRepo := withTempRepository(t)
+	windowsRepo := withTempRepository(t)
+	keepassDB := withTempKeepassDB(t)
 	runner := &fakeRunner{}
 	fakeExec := &fakeSystem{
 		runCapture: map[string]string{},
 	}
 	loader := fakeLoader{cfg: config.File{
 		ResticVersion: "0.18.1",
+		KeepassDB:     keepassDB,
 		Profiles: map[string]config.Profile{
-			"windows": {Repository: `C:\repo`, UseFSSnapshot: true},
-			"wsl":     {Repository: "/repo/wsl", UseFSSnapshot: false},
+			"windows": {Repository: windowsRepo, UseFSSnapshot: true},
+			"wsl":     {Repository: wslRepo, UseFSSnapshot: false},
 		},
 	}}
 	loader.cfgPathSetForTest(rulesDir)
@@ -144,7 +170,7 @@ func TestHandleRunsConfiguredProfiles(t *testing.T) {
 	hasWSL := false
 	for _, call := range runner.calls {
 		joined := strings.Join(call, " ")
-		if strings.Contains(joined, "/repo/wsl") {
+		if strings.Contains(joined, wslRepo) {
 			hasWSL = true
 			if strings.Contains(joined, "--use-fs-snapshot") {
 				t.Fatalf("did not expect wsl profile args to include --use-fs-snapshot: %v", call)
@@ -163,7 +189,7 @@ func TestHandleRunsConfiguredProfiles(t *testing.T) {
 	if !strings.Contains(windowsCall, "restic.exe") {
 		t.Fatalf("expected windows execution with restic.exe, got %v", fakeExec.runCalls[0])
 	}
-	if !strings.Contains(windowsCall, `C:\repo`) {
+	if !strings.Contains(windowsCall, windowsRepo) {
 		t.Fatalf("expected windows repo path in call, got %v", fakeExec.runCalls[0])
 	}
 	if !strings.Contains(windowsCall, "--use-fs-snapshot") {
@@ -183,16 +209,76 @@ func TestHandleRunsConfiguredProfiles(t *testing.T) {
 
 func TestHandleFailsWhenIncludeRulesMissing(t *testing.T) {
 	rulesDir := withTempRules(t, "daily", []string{}, []string{})
+	wslRepo := withTempRepository(t)
+	keepassDB := withTempKeepassDB(t)
 	runner := &fakeRunner{}
-	loader := fakeLoader{cfg: config.File{Profiles: map[string]config.Profile{"wsl": {Repository: "/repo/wsl"}}}}
+	loader := fakeLoader{cfg: config.File{
+		KeepassDB: keepassDB,
+		Profiles:  map[string]config.Profile{"wsl": {Repository: wslRepo}},
+	}}
 	loader.cfgPathSetForTest(rulesDir)
 
 	err := HandleWith(context.Background(), []string{"daily"}, runner, RunDependencies{Loader: loader, Stat: os.Stat})
 	if err == nil {
 		t.Fatalf("expected error")
 	}
-	if !strings.Contains(err.Error(), "read include rules failed") {
+	if !strings.Contains(err.Error(), "missing include rules file") && !strings.Contains(err.Error(), "read include rules failed") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestHandleFailsWhenKeepassDatabaseMissing(t *testing.T) {
+	rulesDir := withTempRules(t, "daily", []string{"wsl"}, []string{"wsl"})
+	wslRepo := withTempRepository(t)
+	runner := &fakeRunner{}
+	loader := fakeLoader{cfg: config.File{
+		KeepassDB: filepath.Join(t.TempDir(), "missing.kdbx"),
+		Profiles:  map[string]config.Profile{"wsl": {Repository: wslRepo}},
+	}}
+	loader.cfgPathSetForTest(rulesDir)
+
+	err := HandleWith(context.Background(), []string{"daily"}, runner, RunDependencies{Loader: loader, Stat: os.Stat})
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+	if !strings.Contains(err.Error(), "keepassxc database not found") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestHandleOffersRepositoryCreation(t *testing.T) {
+	rulesDir := withTempRules(t, "daily", []string{"wsl"}, []string{"wsl"})
+	keepassDB := withTempKeepassDB(t)
+	runner := &fakeRunner{}
+	loader := fakeLoader{cfg: config.File{
+		KeepassDB: keepassDB,
+		Profiles: map[string]config.Profile{
+			"wsl": {Repository: filepath.Join(t.TempDir(), "missing-repo")},
+		},
+	}}
+	loader.cfgPathSetForTest(rulesDir)
+
+	confirmed := false
+	err := HandleWith(context.Background(), []string{"daily"}, runner, RunDependencies{
+		Loader: loader,
+		Stat:   os.Stat,
+		Confirm: func(_ string) (bool, error) {
+			confirmed = true
+			return true, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	if !confirmed {
+		t.Fatalf("expected repository creation prompt")
+	}
+	if len(runner.calls) == 0 {
+		t.Fatalf("expected restic runner calls")
+	}
+	initCall := strings.Join(runner.calls[0], " ")
+	if !strings.Contains(initCall, "init --repo") {
+		t.Fatalf("expected first runner call to initialize repository, got %v", runner.calls[0])
 	}
 }
 

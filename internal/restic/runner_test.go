@@ -19,9 +19,12 @@ func TestFormatCommandQuotesWhitespace(t *testing.T) {
 
 func TestOSRunnerPrintsCommandAndStreamsOutput(t *testing.T) {
 	original := commandContext
+	originalLookPath := commandLookPath
 	commandContext = fakeExecCommand
+	commandLookPath = func(name string) (string, error) { return "/usr/bin/" + name, nil }
 	t.Cleanup(func() {
 		commandContext = original
+		commandLookPath = originalLookPath
 	})
 
 	configPath := writeConfigFile(t, `restic_version: "0.18.1"
@@ -72,9 +75,12 @@ func TestOSRunnerRejectsEmptyArgs(t *testing.T) {
 
 func TestOSRunnerReadsKeepassSettingsFromEnvOverrides(t *testing.T) {
 	original := commandContext
+	originalLookPath := commandLookPath
 	commandContext = fakeExecCommand
+	commandLookPath = func(name string) (string, error) { return "/usr/bin/" + name, nil }
 	t.Cleanup(func() {
 		commandContext = original
+		commandLookPath = originalLookPath
 	})
 
 	configPath := writeConfigFile(t, `restic_version: "0.18.1"
@@ -105,9 +111,12 @@ profiles:
 
 func TestOSRunnerFailsWhenKeepassSettingsMissing(t *testing.T) {
 	original := commandContext
+	originalLookPath := commandLookPath
 	commandContext = fakeExecCommand
+	commandLookPath = func(name string) (string, error) { return "/usr/bin/" + name, nil }
 	t.Cleanup(func() {
 		commandContext = original
+		commandLookPath = originalLookPath
 	})
 
 	configPath := writeConfigFile(t, `restic_version: "0.18.1"
@@ -135,9 +144,12 @@ profiles:
 
 func TestOSRunnerFailsWhenKeepassLookupFails(t *testing.T) {
 	original := commandContext
+	originalLookPath := commandLookPath
 	commandContext = fakeExecCommand
+	commandLookPath = func(name string) (string, error) { return "/usr/bin/" + name, nil }
 	t.Cleanup(func() {
 		commandContext = original
+		commandLookPath = originalLookPath
 	})
 
 	t.Setenv(KeepassDatabaseEnv, "/tmp/vault.kdbx")
@@ -171,9 +183,12 @@ func TestWithResticPasswordReplacesExistingValue(t *testing.T) {
 
 func TestOSRunnerFailsWhenKeepassReturnsEmptyPassword(t *testing.T) {
 	original := commandContext
+	originalLookPath := commandLookPath
 	commandContext = fakeExecCommand
+	commandLookPath = func(name string) (string, error) { return "/usr/bin/" + name, nil }
 	t.Cleanup(func() {
 		commandContext = original
+		commandLookPath = originalLookPath
 	})
 
 	t.Setenv(KeepassDatabaseEnv, "/tmp/vault.kdbx")
@@ -212,6 +227,58 @@ profiles:
 	}
 	if database != "/tmp/config-vault.kdbx" || entry != "config/restic" {
 		t.Fatalf("unexpected lookup settings: database=%q entry=%q", database, entry)
+	}
+}
+
+func TestOSRunnerUsesFlatpakFallbackForKeepassCLI(t *testing.T) {
+	original := commandContext
+	originalLookPath := commandLookPath
+	commandContext = fakeExecCommand
+	commandLookPath = func(name string) (string, error) {
+		if name == "keepassxc-cli" {
+			return "", fmt.Errorf("not found")
+		}
+		if name == "flatpak" {
+			return "/usr/bin/flatpak", nil
+		}
+		return "", fmt.Errorf("not found")
+	}
+	t.Cleanup(func() {
+		commandContext = original
+		commandLookPath = originalLookPath
+	})
+
+	t.Setenv(KeepassDatabaseEnv, "/tmp/vault.kdbx")
+	t.Setenv(KeepassEntryEnv, "restic/main")
+
+	var stdout strings.Builder
+	var stderr strings.Builder
+	runner := NewOSRunner(&stdout, &stderr)
+
+	err := runner.Run(context.Background(), "snapshots")
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+
+	out := stdout.String()
+	if !strings.Contains(out, "$ flatpak run --command=keepassxc-cli org.keepassxc.KeePassXC show -q -a Password /tmp/vault.kdbx restic/main") {
+		t.Fatalf("expected flatpak fallback command in stdout, got %q", out)
+	}
+}
+
+func TestCheckKeepassCLIAvailableFailsWhenNoCommand(t *testing.T) {
+	originalLookPath := commandLookPath
+	commandLookPath = func(string) (string, error) { return "", fmt.Errorf("not found") }
+	t.Cleanup(func() {
+		commandLookPath = originalLookPath
+	})
+
+	err := CheckKeepassCLIAvailable()
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+	if !strings.Contains(err.Error(), "flatpak fallback") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
@@ -258,7 +325,7 @@ func TestHelperProcess(t *testing.T) {
 	}
 
 	commandName := os.Args[3]
-	if commandName == "keepassxc-cli" {
+	if commandName == "keepassxc-cli" || commandName == "flatpak" {
 		if os.Getenv("FAKE_KEEPASS_FAIL") == "1" {
 			fmt.Fprintln(os.Stderr, "database is locked")
 			os.Exit(1)

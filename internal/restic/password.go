@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"strings"
 
 	"github.com/jonathan-tyler/wsl-backup-restic/internal/config"
@@ -16,16 +17,30 @@ const (
 	KeepassEntryEnv    = "WSL_BACKUP_KEEPASSXC_ENTRY"
 )
 
+var commandLookPath = exec.LookPath
+
+type keepassCLICommand struct {
+	name string
+	args []string
+}
+
 func loadResticPassword(ctx context.Context, stdout io.Writer, stderr io.Writer) (string, error) {
 	database, entry, err := resolveKeepassLookupSettings()
 	if err != nil {
 		return "", err
 	}
 
-	args := []string{"show", "-q", "-a", "Password", database, entry}
-	fmt.Fprintf(stdout, "$ keepassxc-cli %s\n", formatCommand(args))
+	keepassCmd, err := resolveKeepassCLICommand()
+	if err != nil {
+		return "", err
+	}
 
-	cmd := commandContext(ctx, "keepassxc-cli", args...)
+	args := []string{"show", "-q", "-a", "Password", database, entry}
+	commandArgs := append(append([]string{}, keepassCmd.args...), args...)
+	printed := append([]string{keepassCmd.name}, commandArgs...)
+	fmt.Fprintf(stdout, "$ %s\n", formatCommand(printed))
+
+	cmd := commandContext(ctx, keepassCmd.name, commandArgs...)
 	cmd.Stderr = stderr
 
 	secret, err := cmd.Output()
@@ -39,6 +54,26 @@ func loadResticPassword(ctx context.Context, stdout io.Writer, stderr io.Writer)
 	}
 
 	return password, nil
+}
+
+func CheckKeepassCLIAvailable() error {
+	_, err := resolveKeepassCLICommand()
+	return err
+}
+
+func resolveKeepassCLICommand() (keepassCLICommand, error) {
+	if _, err := commandLookPath("keepassxc-cli"); err == nil {
+		return keepassCLICommand{name: "keepassxc-cli"}, nil
+	}
+
+	if _, err := commandLookPath("flatpak"); err == nil {
+		return keepassCLICommand{
+			name: "flatpak",
+			args: []string{"run", "--command=keepassxc-cli", "org.keepassxc.KeePassXC"},
+		}, nil
+	}
+
+	return keepassCLICommand{}, fmt.Errorf("keepassxc-cli is not available in PATH and flatpak fallback is unavailable")
 }
 
 func resolveKeepassLookupSettings() (string, string, error) {
