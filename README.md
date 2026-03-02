@@ -79,3 +79,4 @@ backup run daily
 ## Caveats
 
 - `restic` stores symlinks as symlinks by default and does not follow them during backup. This behavior helps avoid recursive traversal from link loops. If symlink following is enabled explicitly in a restic invocation, traversal/loop risk must be evaluated separately.
+- On Windows profiles, enabling `use_fs_snapshot` passes `--use-fs-snapshot` to `restic`, which uses Volume Shadow Copy Service (VSS) snapshots for each volume involved in the backup. Data is read from those snapshots instead of the live filesystem, which helps include files that are locked by other running processes.
