@@ -131,7 +131,7 @@ func ensureRepositoryReady(
 	}
 
 	if strings.EqualFold(profileName, "windows") {
-		if err := runWindowsResticCommand(ctx, []string{"init", "--repo", repository}, profile.RunElevated, exec); err != nil {
+		if err := runWindowsResticCommand(ctx, []string{"init", "--repo", repository}, false, exec); err != nil {
 			return fmt.Errorf("profile %s repository init failed: %w", profileName, err)
 		}
 		return nil

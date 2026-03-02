@@ -9,7 +9,7 @@ import (
 )
 
 func checkWindowsCompatible(ctx context.Context, desiredVersion string, exec system.Executor) error {
-	output, err := exec.RunCapture(ctx, "powershell.exe", "-NoProfile", "-Command", "restic version")
+	output, err := exec.RunCapture(ctx, "pwsh.exe", "-NoProfile", "-Command", "restic version")
 	if err != nil {
 		return fmt.Errorf("windows restic is missing; run backup setup")
 	}
@@ -27,7 +27,7 @@ func checkWindowsCompatible(ctx context.Context, desiredVersion string, exec sys
 }
 
 func syncWindowsInteractive(ctx context.Context, desiredVersion string, exec system.Executor, confirm prompt.ConfirmFunc) (PlatformReport, error) {
-	output, err := exec.RunCapture(ctx, "powershell.exe", "-NoProfile", "-Command", "restic version")
+	output, err := exec.RunCapture(ctx, "pwsh.exe", "-NoProfile", "-Command", "restic version")
 	if err != nil {
 		approved, confirmErr := confirm("Windows restic not found. Install via scoop now?")
 		if confirmErr != nil {
@@ -37,7 +37,7 @@ func syncWindowsInteractive(ctx context.Context, desiredVersion string, exec sys
 			failure := fmt.Errorf("windows restic is required")
 			return PlatformReport{Platform: "windows", Status: SetupFailed, Message: failure.Error()}, failure
 		}
-		if runErr := exec.Run(ctx, "powershell.exe", "-NoProfile", "-Command", "scoop install restic"); runErr != nil {
+		if runErr := exec.Run(ctx, "pwsh.exe", "-NoProfile", "-Command", "scoop install restic"); runErr != nil {
 			return PlatformReport{Platform: "windows", Status: SetupFailed, Message: "install failed"}, runErr
 		}
 		return PlatformReport{Platform: "windows", Status: SetupInstalled, Message: "installed restic via scoop"}, nil
@@ -61,7 +61,7 @@ func syncWindowsInteractive(ctx context.Context, desiredVersion string, exec sys
 		return PlatformReport{Platform: "windows", Status: SetupFailed, Message: failure.Error()}, failure
 	}
 
-	if runErr := exec.Run(ctx, "powershell.exe", "-NoProfile", "-Command", "scoop update restic"); runErr != nil {
+	if runErr := exec.Run(ctx, "pwsh.exe", "-NoProfile", "-Command", "scoop update restic"); runErr != nil {
 		return PlatformReport{Platform: "windows", Status: SetupFailed, Message: "update failed"}, runErr
 	}
 	return PlatformReport{Platform: "windows", Status: SetupUpdated, Message: fmt.Sprintf("updated from %s to %s", installedVersion, desiredVersion)}, nil

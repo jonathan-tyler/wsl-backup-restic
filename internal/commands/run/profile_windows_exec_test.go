@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/jonathan-tyler/wsl-backup-restic/internal/system"
 )
 
 func TestExecuteWindowsProfileBackupRunsResticExe(t *testing.T) {
@@ -107,29 +109,62 @@ func TestExecuteWindowsProfileBackupRunsElevatedViaPowerShell(t *testing.T) {
 	loadWindowsProfilePassword = func(context.Context) (string, error) {
 		return "test-password", nil
 	}
+	originalResolve := resolveWindowsResticExecutable
+	resolveWindowsResticExecutable = func(context.Context, system.Executor) (string, error) {
+		return `C:\\Users\\daily\\scoop\\shims\\restic.exe`, nil
+	}
+	originalElevatedDir := elevatedWindowsTempDir
+	elevatedWindowsTempDir = t.TempDir()
+	originalElevatedPathToWindows := elevatedPathToWindows
+	elevatedPathToWindows = func(path string) (string, bool) {
+		return `C:\\Temp\\` + filepath.Base(path), true
+	}
 	t.Cleanup(func() {
 		loadWindowsProfilePassword = originalLoad
+		resolveWindowsResticExecutable = originalResolve
+		elevatedWindowsTempDir = originalElevatedDir
+		elevatedPathToWindows = originalElevatedPathToWindows
 	})
 
 	fakeExec := &fakeSystem{runCapture: map[string]string{}}
 	rulesDir := t.TempDir()
+	includePath := filepath.Join(rulesDir, "windows.include.daily.txt")
+	if err := os.WriteFile(includePath, []byte("C:\\Users\\daily\\Data\n"), 0o644); err != nil {
+		t.Fatalf("write include file: %v", err)
+	}
 
-	fakeExec.runCapture["wslpath -w "+filepath.Join(rulesDir, "windows.include.daily.txt")] = "C:\\rules\\windows.include.daily.txt"
-	fakeExec.runCapture["wslpath -w "+filepath.Join(os.TempDir(), "wsl-backup-restic-password-111.txt")] = "C:\\Temp\\wsl-backup-restic-password-111.txt"
-	args := []string{"--repo", `C:\repo`, "backup", "--files-from", filepath.Join(rulesDir, "windows.include.daily.txt")}
+	args := []string{"--repo", `C:\repo`, "backup", "--files-from", includePath}
 
 	originalCreateTemp := osCreateTemp
-	osCreateTemp = func(_ string, _ string) (*os.File, error) {
-		path := filepath.Join(os.TempDir(), "wsl-backup-restic-password-111.txt")
+	osCreateTemp = func(_ string, pattern string) (*os.File, error) {
+		path := filepath.Join(elevatedWindowsTempDir, "wsl-backup-restic-password-111.txt")
+		if strings.Contains(pattern, "rule") {
+			path = filepath.Join(elevatedWindowsTempDir, "wsl-backup-rule-111.txt")
+		}
+		if strings.Contains(pattern, "exitcode") {
+			path = filepath.Join(elevatedWindowsTempDir, "wsl-backup-restic-exitcode-111.txt")
+		}
 		file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o600)
 		if err != nil {
 			return nil, err
+		}
+		if strings.Contains(pattern, "exitcode") {
+			if _, err := file.WriteString("0\n"); err != nil {
+				_ = file.Close()
+				return nil, err
+			}
+			if _, err := file.Seek(0, 0); err != nil {
+				_ = file.Close()
+				return nil, err
+			}
 		}
 		return file, nil
 	}
 	t.Cleanup(func() {
 		osCreateTemp = originalCreateTemp
-		_ = os.Remove(filepath.Join(os.TempDir(), "wsl-backup-restic-password-111.txt"))
+		_ = os.Remove(filepath.Join(elevatedWindowsTempDir, "wsl-backup-restic-password-111.txt"))
+		_ = os.Remove(filepath.Join(elevatedWindowsTempDir, "wsl-backup-rule-111.txt"))
+		_ = os.Remove(filepath.Join(elevatedWindowsTempDir, "wsl-backup-restic-exitcode-111.txt"))
 	})
 
 	err := executeWindowsProfileBackup(context.Background(), args, true, fakeExec)
@@ -140,8 +175,8 @@ func TestExecuteWindowsProfileBackupRunsElevatedViaPowerShell(t *testing.T) {
 	if len(fakeExec.runCalls) != 1 {
 		t.Fatalf("expected one run call, got %d", len(fakeExec.runCalls))
 	}
-	if fakeExec.runCalls[0][0] != "powershell.exe" {
-		t.Fatalf("expected powershell.exe call, got %v", fakeExec.runCalls[0])
+	if fakeExec.runCalls[0][0] != "pwsh.exe" {
+		t.Fatalf("expected pwsh.exe call, got %v", fakeExec.runCalls[0])
 	}
 	joined := strings.Join(fakeExec.runCalls[0], " ")
 	if !strings.Contains(joined, "Start-Process") {
@@ -149,5 +184,8 @@ func TestExecuteWindowsProfileBackupRunsElevatedViaPowerShell(t *testing.T) {
 	}
 	if !strings.Contains(joined, "--password-file") {
 		t.Fatalf("expected password-file argument in elevated command, got %v", fakeExec.runCalls[0])
+	}
+	if !strings.Contains(joined, `C:\\Users\\daily\\scoop\\shims\\restic.exe`) && !strings.Contains(joined, `C:\Users\daily\scoop\shims\restic.exe`) {
+		t.Fatalf("expected resolved restic.exe full path in elevated command, got %v", fakeExec.runCalls[0])
 	}
 }

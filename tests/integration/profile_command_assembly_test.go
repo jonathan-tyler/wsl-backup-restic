@@ -102,7 +102,7 @@ func TestRunAssemblesProfileCommandsForWSLAndWindows(t *testing.T) {
 	exec := &fakeSystem{runCapture: map[string]string{}}
 
 	exec.runCapture["restic version"] = "restic 0.18.1 compiled with go"
-	exec.runCapture["powershell.exe -NoProfile -Command restic version"] = "restic 0.18.1 compiled with go"
+	exec.runCapture["pwsh.exe -NoProfile -Command restic version"] = "restic 0.18.1 compiled with go"
 	exec.runCapture["wslpath -w "+filepath.Join(rulesDir, "windows.include.daily.txt")] = `C:\rules\windows.include.daily.txt`
 	exec.runCapture["wslpath -w "+filepath.Join(rulesDir, "windows.exclude.daily.txt")] = `C:\rules\windows.exclude.daily.txt`
 
@@ -110,7 +110,7 @@ func TestRunAssemblesProfileCommandsForWSLAndWindows(t *testing.T) {
 		ResticVersion: "0.18.1",
 		Profiles: map[string]config.Profile{
 			"wsl":     {Repository: wslRepo},
-			"windows": {Repository: windowsRepo, UseFSSnapshot: true},
+			"windows": {Repository: windowsRepo, UseFSSnapshot: false},
 		},
 	}, filepath.Join(rulesDir, "config.yaml"))}
 

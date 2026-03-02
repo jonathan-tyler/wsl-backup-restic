@@ -11,7 +11,7 @@ import (
 
 func executeProfileBackup(ctx context.Context, profileName string, profile config.Profile, resticArgs []string, runner restic.Executor, exec system.Executor) error {
 	if strings.EqualFold(profileName, "windows") {
-		return executeWindowsProfileBackup(ctx, resticArgs, profile.RunElevated, exec)
+		return executeWindowsProfileBackup(ctx, resticArgs, profile.UseFSSnapshot, exec)
 	}
 
 	return executeWSLProfileBackup(ctx, resticArgs, runner)

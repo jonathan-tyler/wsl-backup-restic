@@ -125,11 +125,9 @@ func TestLoadParsesConfig(t *testing.T) {
 profiles:
   wsl:
     repository: /repo/wsl
-    use_fs_snapshot: false
   windows:
     repository: C:\\repo\\windows
     use_fs_snapshot: true
-    run_elevated: true
 `), nil
 		},
 	}
@@ -144,8 +142,34 @@ profiles:
 	if cfg.Profiles["wsl"].Repository != "/repo/wsl" {
 		t.Fatalf("unexpected repository")
 	}
-	if !cfg.Profiles["windows"].RunElevated {
-		t.Fatalf("expected windows run_elevated to be true")
+	if !cfg.Profiles["windows"].UseFSSnapshot {
+		t.Fatalf("expected windows use_fs_snapshot to be true")
+	}
+}
+
+func TestLoadFailsWhenWSLUsesFSSnapshot(t *testing.T) {
+	loader := Loader{
+		Getenv: func(key string) string {
+			if key == "BACKUP_CONFIG" {
+				return "/tmp/config.yaml"
+			}
+			return ""
+		},
+		ReadFile: func(string) ([]byte, error) {
+			return []byte(`profiles:
+  wsl:
+    repository: /repo/wsl
+    use_fs_snapshot: true
+`), nil
+		},
+	}
+
+	_, err := loader.Load()
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+	if !strings.Contains(err.Error(), "supported only for the windows profile") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

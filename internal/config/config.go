@@ -11,7 +11,6 @@ import (
 type Profile struct {
 	Repository    string `yaml:"repository"`
 	UseFSSnapshot bool   `yaml:"use_fs_snapshot"`
-	RunElevated   bool   `yaml:"run_elevated"`
 }
 
 type File struct {
@@ -91,6 +90,9 @@ func validate(cfg File) error {
 	for profileName, profile := range cfg.Profiles {
 		if profile.Repository == "" {
 			return fmt.Errorf("profile %q has empty repository", profileName)
+		}
+		if profile.UseFSSnapshot && profileName != "windows" {
+			return fmt.Errorf("profile %q enables use_fs_snapshot, but use_fs_snapshot is supported only for the windows profile", profileName)
 		}
 	}
 

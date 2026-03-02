@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 	"sync"
 
 	"github.com/jonathan-tyler/wsl-backup-restic/internal/apperr"
@@ -128,7 +129,7 @@ func isValidCadence(value string) bool {
 func buildRunArgs(configDir string, profileName string, profile config.Profile, cadence string, extraArgs []string, stat fileStatFunc) ([]string, error) {
 	resticArgs := []string{"--repo", profile.Repository, "backup", "--tag", "cadence=" + cadence, "--tag", "profile=" + profileName}
 
-	if profile.UseFSSnapshot {
+	if strings.EqualFold(profileName, "windows") && profile.UseFSSnapshot {
 		resticArgs = append(resticArgs, "--use-fs-snapshot")
 	}
 

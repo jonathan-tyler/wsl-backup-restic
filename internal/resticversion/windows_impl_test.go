@@ -12,7 +12,7 @@ import (
 func TestCheckCompatibleFailsWithSetupHintOnWindowsMismatch(t *testing.T) {
 	exec := &fakeSystemExecutor{
 		captureOutput: map[string]string{
-			"powershell.exe -NoProfile -Command restic version": "restic 0.17.3 compiled with go1.24",
+			"pwsh.exe -NoProfile -Command restic version": "restic 0.17.3 compiled with go1.24",
 		},
 	}
 
@@ -32,7 +32,7 @@ func TestCheckCompatibleFailsWithSetupHintOnWindowsMismatch(t *testing.T) {
 func TestSyncInteractiveWindowsUpdateDeclinedReturnsError(t *testing.T) {
 	exec := &fakeSystemExecutor{
 		captureOutput: map[string]string{
-			"powershell.exe -NoProfile -Command restic version": "restic 0.17.3 compiled with go1.24",
+			"pwsh.exe -NoProfile -Command restic version": "restic 0.17.3 compiled with go1.24",
 		},
 		captureErr: map[string]error{},
 		runErr:     map[string]error{},
@@ -59,7 +59,7 @@ func TestSyncInteractiveWindowsUpdateDeclinedReturnsError(t *testing.T) {
 func TestSyncInteractiveWithReportReturnsWindowsFailedStatusOnDecline(t *testing.T) {
 	exec := &fakeSystemExecutor{
 		captureOutput: map[string]string{
-			"powershell.exe -NoProfile -Command restic version": "restic 0.17.3 compiled with go1.24",
+			"pwsh.exe -NoProfile -Command restic version": "restic 0.17.3 compiled with go1.24",
 		},
 	}
 
@@ -82,7 +82,7 @@ func TestSyncInteractiveWithReportReturnsWindowsFailedStatusOnDecline(t *testing
 func TestSyncWindowsInteractiveMissingConfirmError(t *testing.T) {
 	exec := &fakeSystemExecutor{
 		captureErr: map[string]error{
-			"powershell.exe -NoProfile -Command restic version": errors.New("not found"),
+			"pwsh.exe -NoProfile -Command restic version": errors.New("not found"),
 		},
 	}
 
@@ -98,7 +98,7 @@ func TestSyncWindowsInteractiveMissingConfirmError(t *testing.T) {
 func TestSyncWindowsInteractiveMissingDeclined(t *testing.T) {
 	exec := &fakeSystemExecutor{
 		captureErr: map[string]error{
-			"powershell.exe -NoProfile -Command restic version": errors.New("not found"),
+			"pwsh.exe -NoProfile -Command restic version": errors.New("not found"),
 		},
 	}
 
@@ -117,10 +117,10 @@ func TestSyncWindowsInteractiveMissingDeclined(t *testing.T) {
 func TestSyncWindowsInteractiveInstallFailure(t *testing.T) {
 	exec := &fakeSystemExecutor{
 		captureErr: map[string]error{
-			"powershell.exe -NoProfile -Command restic version": errors.New("not found"),
+			"pwsh.exe -NoProfile -Command restic version": errors.New("not found"),
 		},
 		runErr: map[string]error{
-			"powershell.exe -NoProfile -Command scoop install restic": errors.New("install fail"),
+			"pwsh.exe -NoProfile -Command scoop install restic": errors.New("install fail"),
 		},
 	}
 
@@ -139,7 +139,7 @@ func TestSyncWindowsInteractiveInstallFailure(t *testing.T) {
 func TestSyncWindowsInteractiveMissingInstallSuccess(t *testing.T) {
 	exec := &fakeSystemExecutor{
 		captureErr: map[string]error{
-			"powershell.exe -NoProfile -Command restic version": errors.New("not found"),
+			"pwsh.exe -NoProfile -Command restic version": errors.New("not found"),
 		},
 	}
 
@@ -158,7 +158,7 @@ func TestSyncWindowsInteractiveMissingInstallSuccess(t *testing.T) {
 func TestSyncWindowsInteractiveParseFailure(t *testing.T) {
 	exec := &fakeSystemExecutor{
 		captureOutput: map[string]string{
-			"powershell.exe -NoProfile -Command restic version": "no version",
+			"pwsh.exe -NoProfile -Command restic version": "no version",
 		},
 	}
 
@@ -177,7 +177,7 @@ func TestSyncWindowsInteractiveParseFailure(t *testing.T) {
 func TestSyncWindowsInteractiveMismatchConfirmError(t *testing.T) {
 	exec := &fakeSystemExecutor{
 		captureOutput: map[string]string{
-			"powershell.exe -NoProfile -Command restic version": "restic 0.17.3 compiled with go1.24",
+			"pwsh.exe -NoProfile -Command restic version": "restic 0.17.3 compiled with go1.24",
 		},
 	}
 
@@ -193,10 +193,10 @@ func TestSyncWindowsInteractiveMismatchConfirmError(t *testing.T) {
 func TestSyncWindowsInteractiveMismatchUpdateFailure(t *testing.T) {
 	exec := &fakeSystemExecutor{
 		captureOutput: map[string]string{
-			"powershell.exe -NoProfile -Command restic version": "restic 0.17.3 compiled with go1.24",
+			"pwsh.exe -NoProfile -Command restic version": "restic 0.17.3 compiled with go1.24",
 		},
 		runErr: map[string]error{
-			"powershell.exe -NoProfile -Command scoop update restic": errors.New("update fail"),
+			"pwsh.exe -NoProfile -Command scoop update restic": errors.New("update fail"),
 		},
 	}
 
@@ -215,7 +215,7 @@ func TestSyncWindowsInteractiveMismatchUpdateFailure(t *testing.T) {
 func TestSyncWindowsInteractiveMismatchUpdateSuccess(t *testing.T) {
 	exec := &fakeSystemExecutor{
 		captureOutput: map[string]string{
-			"powershell.exe -NoProfile -Command restic version": "restic 0.17.3 compiled with go1.24",
+			"pwsh.exe -NoProfile -Command restic version": "restic 0.17.3 compiled with go1.24",
 		},
 	}
 

@@ -11,7 +11,7 @@ func TestCheckCompatibleNoActionWhenMatching(t *testing.T) {
 	exec := &fakeSystemExecutor{
 		captureOutput: map[string]string{
 			"restic version":                             "restic 0.18.1 compiled with go1.24",
-			"powershell.exe -NoProfile -Command restic version": "restic 0.18.1 compiled with go1.24",
+			"pwsh.exe -NoProfile -Command restic version": "restic 0.18.1 compiled with go1.24",
 		},
 		captureErr: map[string]error{},
 		runErr:     map[string]error{},

@@ -157,13 +157,13 @@ func TestHandleRunsConfiguredProfiles(t *testing.T) {
 	loader := fakeLoader{cfg: config.File{
 		ResticVersion: "0.18.1",
 		Profiles: map[string]config.Profile{
-			"windows": {Repository: windowsRepo, UseFSSnapshot: true},
+			"windows": {Repository: windowsRepo, UseFSSnapshot: false},
 			"wsl":     {Repository: wslRepo, UseFSSnapshot: false},
 		},
 	}}
 	loader.cfgPathSetForTest(rulesDir)
 	fakeExec.runCapture["restic version"] = "restic 0.18.1 compiled with go"
-	fakeExec.runCapture["powershell.exe -NoProfile -Command restic version"] = "restic 0.18.1 compiled with go"
+	fakeExec.runCapture["pwsh.exe -NoProfile -Command restic version"] = "restic 0.18.1 compiled with go"
 	fakeExec.runCapture["wslpath -w "+filepath.Join(rulesDir, "windows.include.weekly.txt")] = "C:\\rules\\windows.include.weekly.txt"
 	fakeExec.runCapture["wslpath -w "+filepath.Join(rulesDir, "windows.exclude.weekly.txt")] = "C:\\rules\\windows.exclude.weekly.txt"
 
@@ -204,9 +204,6 @@ func TestHandleRunsConfiguredProfiles(t *testing.T) {
 	}
 	if !strings.Contains(windowsCall, windowsRepo) {
 		t.Fatalf("expected windows repo path in call, got %v", fakeExec.runCalls[0])
-	}
-	if !strings.Contains(windowsCall, "--use-fs-snapshot") {
-		t.Fatalf("expected windows fs snapshot flag in call, got %v", fakeExec.runCalls[0])
 	}
 	if !strings.Contains(windowsCall, `C:\rules\windows.include.weekly.txt`) {
 		t.Fatalf("expected converted include path in windows call, got %v", fakeExec.runCalls[0])
@@ -324,12 +321,12 @@ func TestHandleOffersWindowsRepositoryCreationWithPasswordFile(t *testing.T) {
 	loader := fakeLoader{cfg: config.File{
 		ResticVersion: "0.18.1",
 		Profiles: map[string]config.Profile{
-			"windows": {Repository: `C:\\missing\\repo`, UseFSSnapshot: true},
+			"windows": {Repository: `C:\\missing\\repo`, UseFSSnapshot: false},
 		},
 	}}
 	loader.cfgPathSetForTest(rulesDir)
 	fakeExec.runCapture["restic version"] = "restic 0.18.1 compiled with go"
-	fakeExec.runCapture["powershell.exe -NoProfile -Command restic version"] = "restic 0.18.1 compiled with go"
+	fakeExec.runCapture["pwsh.exe -NoProfile -Command restic version"] = "restic 0.18.1 compiled with go"
 	fakeExec.runCapture["wslpath -w "+filepath.Join(rulesDir, "windows.include.daily.txt")] = `C:\\rules\\windows.include.daily.txt`
 	fakeExec.runCapture["wslpath -w "+filepath.Join(rulesDir, "windows.exclude.daily.txt")] = `C:\\rules\\windows.exclude.daily.txt`
 

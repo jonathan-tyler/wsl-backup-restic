@@ -8,9 +8,8 @@ restic_version: "0.18.1"
 profiles:
   wsl:
     repository: /path/to/restic-repo
-    use_fs_snapshot: false
 
   windows:
     repository: C:\\path\\to\\restic-repo
     use_fs_snapshot: true
-    run_elevated: false
+    # When enabled, backup runs through an elevated Windows process (UAC prompt).
