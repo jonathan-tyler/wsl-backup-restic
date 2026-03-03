@@ -70,20 +70,30 @@ func validateRepositoryUniqueness(profiles map[string]config.Profile) error {
 
 func validateRuleFilesExist(configDir string, cadence string, profiles map[string]config.Profile, stat fileStatFunc) error {
 	for profileName := range profiles {
-		includePath := config.IncludeRulesPath(configDir, profileName, cadence)
-		if _, err := stat(includePath); err != nil {
-			if os.IsNotExist(err) {
-				return fmt.Errorf("profile %s missing include rules file: %s", profileName, includePath)
+		includePaths, err := includeRulePaths(configDir, profileName, cadence)
+		if err != nil {
+			return err
+		}
+		for _, includePath := range includePaths {
+			if _, err := stat(includePath); err != nil {
+				if os.IsNotExist(err) {
+					return fmt.Errorf("profile %s missing include rules file: %s", profileName, includePath)
+				}
+				return fmt.Errorf("profile %s include rules check failed: %w", profileName, err)
 			}
-			return fmt.Errorf("profile %s include rules check failed: %w", profileName, err)
 		}
 
-		excludePath := config.ExcludeRulesPath(configDir, profileName, cadence)
-		if _, err := stat(excludePath); err != nil {
-			if os.IsNotExist(err) {
-				return fmt.Errorf("profile %s missing exclude rules file: %s", profileName, excludePath)
+		excludePaths, err := excludeRulePaths(configDir, profileName, cadence)
+		if err != nil {
+			return err
+		}
+		for _, excludePath := range excludePaths {
+			if _, err := stat(excludePath); err != nil {
+				if os.IsNotExist(err) {
+					return fmt.Errorf("profile %s missing exclude rules file: %s", profileName, excludePath)
+				}
+				return fmt.Errorf("profile %s exclude rules check failed: %w", profileName, err)
 			}
-			return fmt.Errorf("profile %s exclude rules check failed: %w", profileName, err)
 		}
 	}
 

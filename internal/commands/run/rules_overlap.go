@@ -18,19 +18,24 @@ func validateIncludeRuleOverlap(configDir string, cadence string, profiles map[s
 func validateRuleKindOverlap(configDir string, cadence string, profiles map[string]config.Profile, readFile readFileFunc, kind string) error {
 	items := make([]includeEntry, 0)
 	for profileName := range profiles {
-		rulesPath := rulesFilePath(configDir, profileName, cadence, kind)
-		content, err := readFile(rulesPath)
+		rulesPaths, err := rulesFilePaths(configDir, profileName, cadence, kind)
 		if err != nil {
-			return fmt.Errorf("profile %s read %s rules failed: %w", profileName, kind, err)
+			return err
 		}
+		for _, rulesPath := range rulesPaths {
+			content, err := readFile(rulesPath)
+			if err != nil {
+				return fmt.Errorf("profile %s read %s rules failed: %w", profileName, kind, err)
+			}
 
-		rules := parseRuleLines(string(content))
-		for _, rule := range rules {
-			items = append(items, includeEntry{
-				Profile: profileName,
-				Raw:     rule,
-				Norm:    normalizePath(rule),
-			})
+			rules := parseRuleLines(string(content))
+			for _, rule := range rules {
+				items = append(items, includeEntry{
+					Profile: profileName,
+					Raw:     rule,
+					Norm:    normalizePath(rule),
+				})
+			}
 		}
 	}
 
@@ -56,11 +61,11 @@ func validateRuleKindOverlap(configDir string, cadence string, profiles map[stri
 	return nil
 }
 
-func rulesFilePath(configDir string, profile string, cadence string, kind string) string {
+func rulesFilePaths(configDir string, profile string, cadence string, kind string) ([]string, error) {
 	if kind == "exclude" {
-		return config.ExcludeRulesPath(configDir, profile, cadence)
+		return excludeRulePaths(configDir, profile, cadence)
 	}
-	return config.IncludeRulesPath(configDir, profile, cadence)
+	return includeRulePaths(configDir, profile, cadence)
 }
 
 type includeEntry struct {

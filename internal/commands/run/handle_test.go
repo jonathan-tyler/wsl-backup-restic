@@ -96,17 +96,24 @@ func withTempRules(t *testing.T, cadence string, includeProfiles []string, exclu
 	t.Helper()
 
 	dir := t.TempDir()
-	for _, profile := range includeProfiles {
-		path := filepath.Join(dir, fmt.Sprintf("%s.include.%s.txt", profile, cadence))
-		if err := os.WriteFile(path, []byte("/tmp/source-"+profile+"\n"), 0o644); err != nil {
-			t.Fatalf("write include rules: %v", err)
-		}
+	cadences, err := inheritedCadences(cadence)
+	if err != nil {
+		t.Fatalf("resolve cadences: %v", err)
 	}
 
-	for _, profile := range excludeProfiles {
-		path := filepath.Join(dir, fmt.Sprintf("%s.exclude.%s.txt", profile, cadence))
-		if err := os.WriteFile(path, []byte("*.tmp\n"), 0o644); err != nil {
-			t.Fatalf("write exclude rules: %v", err)
+	for _, item := range cadences {
+		for _, profile := range includeProfiles {
+			path := filepath.Join(dir, fmt.Sprintf("%s.include.%s.txt", profile, item))
+			if err := os.WriteFile(path, []byte("/tmp/source-"+profile+"\n"), 0o644); err != nil {
+				t.Fatalf("write include rules: %v", err)
+			}
+		}
+
+		for _, profile := range excludeProfiles {
+			path := filepath.Join(dir, fmt.Sprintf("%s.exclude.%s.txt", profile, item))
+			if err := os.WriteFile(path, []byte("*.tmp\n"), 0o644); err != nil {
+				t.Fatalf("write exclude rules: %v", err)
+			}
 		}
 	}
 
@@ -473,6 +480,48 @@ func TestBuildRunArgsErrorsOnUnexpectedExcludeStatFailure(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "exclude rules check failed") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestBuildRunArgsWeeklyIncludesDailyAndWeeklyRuleFiles(t *testing.T) {
+	rulesDir := withTempRules(t, "weekly", []string{"wsl"}, []string{"wsl"})
+
+	args, err := buildRunArgs(rulesDir, "wsl", config.Profile{Repository: "/repo"}, "weekly", nil, os.Stat)
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+
+	joined := strings.Join(args, " ")
+	if !strings.Contains(joined, "--files-from "+filepath.Join(rulesDir, "wsl.include.daily.txt")) {
+		t.Fatalf("expected daily include rules in args: %v", args)
+	}
+	if !strings.Contains(joined, "--files-from "+filepath.Join(rulesDir, "wsl.include.weekly.txt")) {
+		t.Fatalf("expected weekly include rules in args: %v", args)
+	}
+	if !strings.Contains(joined, "--exclude-file "+filepath.Join(rulesDir, "wsl.exclude.daily.txt")) {
+		t.Fatalf("expected daily exclude rules in args: %v", args)
+	}
+	if !strings.Contains(joined, "--exclude-file "+filepath.Join(rulesDir, "wsl.exclude.weekly.txt")) {
+		t.Fatalf("expected weekly exclude rules in args: %v", args)
+	}
+}
+
+func TestBuildRunArgsMonthlyIncludesDailyWeeklyAndMonthlyRuleFiles(t *testing.T) {
+	rulesDir := withTempRules(t, "monthly", []string{"wsl"}, []string{"wsl"})
+
+	args, err := buildRunArgs(rulesDir, "wsl", config.Profile{Repository: "/repo"}, "monthly", nil, os.Stat)
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+
+	joined := strings.Join(args, " ")
+	for _, cadence := range []string{"daily", "weekly", "monthly"} {
+		if !strings.Contains(joined, "--files-from "+filepath.Join(rulesDir, "wsl.include."+cadence+".txt")) {
+			t.Fatalf("expected %s include rules in args: %v", cadence, args)
+		}
+		if !strings.Contains(joined, "--exclude-file "+filepath.Join(rulesDir, "wsl.exclude."+cadence+".txt")) {
+			t.Fatalf("expected %s exclude rules in args: %v", cadence, args)
+		}
 	}
 }
 
