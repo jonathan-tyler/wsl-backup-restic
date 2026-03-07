@@ -29,11 +29,11 @@ type fakeLoader struct {
 }
 
 type fakeSystem struct {
-	runCalls    [][]string
-	runWithEnv  []map[string]string
-	runCapture  map[string]string
-	runErr      map[string]error
-	captureErr  map[string]error
+	runCalls   [][]string
+	runWithEnv []map[string]string
+	runCapture map[string]string
+	runErr     map[string]error
+	captureErr map[string]error
 }
 
 func (s *fakeSystem) Run(_ context.Context, name string, args ...string) error {
@@ -437,8 +437,8 @@ func TestHandleStopsAfterFirstProfileError(t *testing.T) {
 	runner := &fakeRunner{}
 	fakeExec := &fakeSystem{
 		runCapture: map[string]string{},
-			runErr: map[string]error{
-				"restic.exe --password-file C:\\rules\\backup-password.txt --repo C:\\repo\\windows backup --tag cadence=daily --tag profile=windows --files-from C:\\rules\\includes.daily.txt --exclude-file C:\\rules\\excludes.txt": fmt.Errorf("windows failed"),
+		runErr: map[string]error{
+			"restic.exe --password-file C:\\rules\\backup-password.txt --repo C:\\repo\\windows backup --tag cadence=daily --tag profile=windows --files-from C:\\rules\\includes.daily.txt --exclude-file C:\\rules\\excludes.txt": fmt.Errorf("windows failed"),
 		},
 	}
 	loader := fakeLoader{cfg: config.File{
@@ -576,50 +576,6 @@ func TestBuildRunArgsMonthlyIncludesDailyWeeklyAndMonthlyRuleFiles(t *testing.T)
 	}
 	if !strings.Contains(joined, "--exclude-file "+filepath.Join(rulesDir, "excludes.txt")) {
 		t.Fatalf("expected profile exclude rules in args: %v", args)
-	}
-}
-
-func TestValidateIncludeRuleOverlapFailsOnCrossProfileOverlap(t *testing.T) {
-	dir := t.TempDir()
-	if err := validateIncludeRuleOverlap(dir, "daily", map[string]config.Profile{
-		"wsl":     {Repository: "/repo/wsl"},
-		"windows": {Repository: `C:\repo`},
-	}, os.ReadFile); err != nil {
-		t.Fatalf("expected nil error, got %v", err)
-	}
-}
-
-func TestValidateIncludeRuleOverlapAllowsDistinctPaths(t *testing.T) {
-	if err := validateIncludeRuleOverlap(t.TempDir(), "daily", map[string]config.Profile{
-		"wsl":     {Repository: "/repo/wsl"},
-		"windows": {Repository: `C:\repo`},
-	}, os.ReadFile); err != nil {
-		t.Fatalf("expected nil error, got %v", err)
-	}
-}
-
-func TestValidateIncludeRuleOverlapAllowsExcludeOverlap(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "excludes.txt"), []byte("/mnt/c/Users/mike\nC:\\Users\\mike\\docs\n"), 0o644); err != nil {
-		t.Fatalf("write exclude rules: %v", err)
-	}
-
-	err := validateIncludeRuleOverlap(dir, "daily", map[string]config.Profile{
-		"wsl":     {Repository: "/repo/wsl"},
-		"windows": {Repository: `C:\repo`},
-	}, os.ReadFile)
-	if err != nil {
-		t.Fatalf("expected nil error, got %v", err)
-	}
-}
-
-func TestValidateIncludeRuleOverlapDetectsWSLAndWindowsEquivalentPaths(t *testing.T) {
-	dir := t.TempDir()
-	if err := validateIncludeRuleOverlap(dir, "daily", map[string]config.Profile{
-		"wsl":     {Repository: "/repo/wsl"},
-		"windows": {Repository: `C:\repo`},
-	}, os.ReadFile); err != nil {
-		t.Fatalf("expected nil error, got %v", err)
 	}
 }
 

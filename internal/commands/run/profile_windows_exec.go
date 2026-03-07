@@ -359,7 +359,7 @@ func wslPathToWindowsPath(path string) (string, bool) {
 	}
 
 	rest := path[len("/mnt/c"):]
-	rest = strings.ReplaceAll(rest, "/", `\\`)
+	rest = strings.ReplaceAll(rest, "/", `\`)
 	return strings.ToUpper(string(drive)) + ":" + rest, true
 }
 

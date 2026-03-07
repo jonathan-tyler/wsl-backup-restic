@@ -13,11 +13,22 @@ import (
 )
 
 type fakeRunner struct {
-	calls [][]string
+	calls           [][]string
+	includeContents []string
 }
 
 func (f *fakeRunner) Run(_ context.Context, args ...string) error {
 	f.calls = append(f.calls, append([]string{}, args...))
+	for index := 0; index < len(args)-1; index++ {
+		if args[index] != "--files-from" {
+			continue
+		}
+		content, err := os.ReadFile(args[index+1])
+		if err != nil {
+			return err
+		}
+		f.includeContents = append(f.includeContents, string(content))
+	}
 	return nil
 }
 
@@ -139,7 +150,13 @@ func TestRunAssemblesProfileCommandsForWSLAndWindows(t *testing.T) {
 	if !strings.Contains(windowsCommand, `C:\\converted\\path`) {
 		t.Fatalf("expected converted windows include path, got %v", exec.runCalls[0])
 	}
-	if !strings.Contains(strings.Join(runner.calls[0], " "), filepath.Join(rulesDir, "includes.daily.txt")) {
-		t.Fatalf("expected shared include rules in wsl command, got %v", runner.calls[0])
+	if strings.Contains(strings.Join(runner.calls[0], " "), filepath.Join(rulesDir, "includes.daily.txt")) {
+		t.Fatalf("expected wsl command to use a staged include file, got %v", runner.calls[0])
+	}
+	if len(runner.includeContents) != 1 {
+		t.Fatalf("expected captured staged include content, got %d entries", len(runner.includeContents))
+	}
+	if runner.includeContents[0] != "\n" {
+		t.Fatalf("expected staged wsl include content to filter mounted windows paths, got %q", runner.includeContents[0])
 	}
 }
