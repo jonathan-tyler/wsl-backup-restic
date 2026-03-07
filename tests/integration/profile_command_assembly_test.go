@@ -65,15 +65,19 @@ func (s *fakeSystem) RunCapture(_ context.Context, name string, args ...string) 
 	return "", nil
 }
 
-func writeRules(t *testing.T, dir string, profile string, cadence string) {
+func writeRules(t *testing.T, dir string, cadence string) {
 	t.Helper()
-	includePath := filepath.Join(dir, fmt.Sprintf("%s.include.%s.txt", profile, cadence))
-	if err := os.WriteFile(includePath, []byte("/tmp/src-"+profile+"\n"), 0o644); err != nil {
+	includePath := filepath.Join(dir, fmt.Sprintf("includes.%s.txt", cadence))
+	if err := os.WriteFile(includePath, []byte("/mnt/c/tmp/src\n"), 0o644); err != nil {
 		t.Fatalf("write include: %v", err)
 	}
+}
 
-	excludePath := filepath.Join(dir, fmt.Sprintf("%s.exclude.txt", profile))
-	if err := os.WriteFile(excludePath, []byte("/tmp/exclude-"+profile+"\n"), 0o644); err != nil {
+func writeSharedExcludeRules(t *testing.T, dir string) {
+	t.Helper()
+
+	excludePath := filepath.Join(dir, "excludes.txt")
+	if err := os.WriteFile(excludePath, []byte("/tmp/exclude\n"), 0o644); err != nil {
 		t.Fatalf("write exclude: %v", err)
 	}
 }
@@ -90,8 +94,8 @@ func TestRunAssemblesProfileCommandsForWSLAndWindows(t *testing.T) {
 	t.Setenv("RESTIC_PASSWORD", "test-password")
 
 	rulesDir := t.TempDir()
-	writeRules(t, rulesDir, "wsl", "daily")
-	writeRules(t, rulesDir, "windows", "daily")
+	writeRules(t, rulesDir, "daily")
+	writeSharedExcludeRules(t, rulesDir)
 
 	wslRepo := t.TempDir()
 	windowsRepo := t.TempDir()
@@ -103,8 +107,6 @@ func TestRunAssemblesProfileCommandsForWSLAndWindows(t *testing.T) {
 
 	exec.runCapture["restic version"] = "restic 0.18.1 compiled with go"
 	exec.runCapture["pwsh.exe -NoProfile -Command restic version"] = "restic 0.18.1 compiled with go"
-	exec.runCapture["wslpath -w "+filepath.Join(rulesDir, "windows.include.daily.txt")] = `C:\rules\windows.include.daily.txt`
-	exec.runCapture["wslpath -w "+filepath.Join(rulesDir, "windows.exclude.txt")] = `C:\rules\windows.exclude.txt`
 
 	loader := fakeLoader{cfg: config.FileWithPathForTest(config.File{
 		ResticVersion: "0.18.1",
@@ -134,7 +136,10 @@ func TestRunAssemblesProfileCommandsForWSLAndWindows(t *testing.T) {
 	if !strings.Contains(windowsCommand, "restic.exe") {
 		t.Fatalf("expected restic.exe command, got %v", exec.runCalls[0])
 	}
-	if !strings.Contains(windowsCommand, `C:\rules\windows.include.daily.txt`) {
+	if !strings.Contains(windowsCommand, `C:\\converted\\path`) {
 		t.Fatalf("expected converted windows include path, got %v", exec.runCalls[0])
+	}
+	if !strings.Contains(strings.Join(runner.calls[0], " "), filepath.Join(rulesDir, "includes.daily.txt")) {
+		t.Fatalf("expected shared include rules in wsl command, got %v", runner.calls[0])
 	}
 }

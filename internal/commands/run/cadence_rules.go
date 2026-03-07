@@ -38,5 +38,5 @@ func excludeRulePaths(configDir string, profileName string, cadence string) ([]s
 		return nil, err
 	}
 
-	return []string{config.ExcludeRulesPath(configDir, profileName)}, nil
+	return []string{config.ExcludeRulesPath(configDir)}, nil
 }

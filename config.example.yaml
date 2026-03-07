@@ -4,8 +4,8 @@
 # This sample is used by the installer scaffold and as a starting point.
 # Daily runs can execute backups when config is present and valid.
 # Rules are read from the config directory using:
-# - Include files: <profile>.include.daily.txt, <profile>.include.weekly.txt, <profile>.include.monthly.txt
-# - Exclude file: <profile>.exclude.txt (single file per profile)
+# - Include files: includes.daily.txt, includes.weekly.txt, includes.monthly.txt
+# - Exclude file: excludes.txt (single shared file)
 
 restic_version: "0.18.1"
 profiles:

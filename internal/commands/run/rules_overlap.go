@@ -12,7 +12,11 @@ import (
 type readFileFunc func(string) ([]byte, error)
 
 func validateIncludeRuleOverlap(configDir string, cadence string, profiles map[string]config.Profile, readFile readFileFunc) error {
-	return validateRuleKindOverlap(configDir, cadence, profiles, readFile, "include")
+	_ = configDir
+	_ = cadence
+	_ = profiles
+	_ = readFile
+	return nil
 }
 
 func validateRuleKindOverlap(configDir string, cadence string, profiles map[string]config.Profile, readFile readFileFunc, kind string) error {

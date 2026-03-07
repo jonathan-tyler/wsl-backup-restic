@@ -21,15 +21,21 @@ func TestExecuteWindowsProfileBackupRunsResticExe(t *testing.T) {
 
 	fakeExec := &fakeSystem{runCapture: map[string]string{}}
 	rulesDir := t.TempDir()
+	includePath := filepath.Join(rulesDir, "includes.daily.txt")
+	if err := os.WriteFile(includePath, []byte("/mnt/c/Users/daily/Data\n"), 0o644); err != nil {
+		t.Fatalf("write include file: %v", err)
+	}
 
-	fakeExec.runCapture["wslpath -w "+filepath.Join(rulesDir, "windows.include.daily.txt")] = "C:\\rules\\windows.include.daily.txt"
-	fakeExec.runCapture["wslpath -w "+filepath.Join(rulesDir, "windows.exclude.txt")] = "C:\\rules\\windows.exclude.txt"
+	fakeExec.runCapture["wslpath -w "+filepath.Join(os.TempDir(), "wsl-backup-orchestrator-rule-000.txt")] = "C:\\Temp\\wsl-backup-orchestrator-rule-000.txt"
 	fakeExec.runCapture["wslpath -w "+filepath.Join(os.TempDir(), "wsl-backup-orchestrator-password-000.txt")] = "C:\\Temp\\wsl-backup-orchestrator-password-000.txt"
-	args := []string{"--repo", `C:\repo`, "backup", "--files-from", filepath.Join(rulesDir, "windows.include.daily.txt")}
+	args := []string{"--repo", `C:\repo`, "backup", "--files-from", includePath}
 
 	originalCreateTemp := osCreateTemp
-	osCreateTemp = func(_ string, _ string) (*os.File, error) {
+	osCreateTemp = func(_ string, pattern string) (*os.File, error) {
 		path := filepath.Join(os.TempDir(), "wsl-backup-orchestrator-password-000.txt")
+		if strings.Contains(pattern, "rule") {
+			path = filepath.Join(os.TempDir(), "wsl-backup-orchestrator-rule-000.txt")
+		}
 		file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o600)
 		if err != nil {
 			return nil, err
@@ -55,7 +61,7 @@ func TestExecuteWindowsProfileBackupRunsResticExe(t *testing.T) {
 	if !strings.Contains(joined, `--password-file C:\Temp\wsl-backup-orchestrator-password-000.txt`) {
 		t.Fatalf("expected windows password file arg, got %v", fakeExec.runCalls[0])
 	}
-	if !strings.Contains(joined, `C:\rules\windows.include.daily.txt`) {
+	if !strings.Contains(joined, `C:\Temp\wsl-backup-orchestrator-rule-000.txt`) {
 		t.Fatalf("expected converted path, got %v", fakeExec.runCalls[0])
 	}
 	if len(fakeExec.runWithEnv) != 1 {
@@ -69,18 +75,29 @@ func TestExecuteWindowsProfileBackupRunsResticExe(t *testing.T) {
 	if _, statErr := os.Stat(passwordPath); !os.IsNotExist(statErr) {
 		t.Fatalf("expected temporary password file cleanup, stat err=%v", statErr)
 	}
+	rulePath := filepath.Join(os.TempDir(), "wsl-backup-orchestrator-rule-000.txt")
+	if _, statErr := os.Stat(rulePath); !os.IsNotExist(statErr) {
+		t.Fatalf("expected temporary rule file cleanup, stat err=%v", statErr)
+	}
 }
 
-func TestConvertRuleFileArgsToWindowsPassesThroughWindowsStylePaths(t *testing.T) {
-	fakeExec := &fakeSystem{runCapture: map[string]string{}}
-	args := []string{"backup", "--files-from", `C:\rules\windows.include.daily.txt`}
+func TestTranslateRuleFileContentForWindowsConvertsAndFiltersIncludePaths(t *testing.T) {
+	content := []byte("# comment\n/mnt/c/Users/daily/Data\n/tmp/wsl-only\nC:\\Users\\daily\\Docs\nrelative.txt\n")
 
-	converted, err := convertRuleFileArgsToWindows(context.Background(), args, fakeExec)
-	if err != nil {
-		t.Fatalf("expected nil error, got %v", err)
+	got := string(translateRuleFileContentForWindows(content, "--files-from"))
+	want := "# comment\nC:\\Users\\daily\\Data\n\nC:\\Users\\daily\\Docs\nrelative.txt\n"
+	if got != want {
+		t.Fatalf("unexpected translated content: got %q want %q", got, want)
 	}
-	if converted[2] != `C:\rules\windows.include.daily.txt` {
-		t.Fatalf("unexpected conversion result: %v", converted)
+}
+
+func TestTranslateRuleFileContentForWindowsKeepsExcludePatterns(t *testing.T) {
+	content := []byte("# comment\n/mnt/c/Users/daily/Data\n/tmp/wsl-only\n*.tmp\n")
+
+	got := string(translateRuleFileContentForWindows(content, "--exclude-file"))
+	want := "# comment\nC:\\Users\\daily\\Data\n/tmp/wsl-only\n*.tmp\n"
+	if got != want {
+		t.Fatalf("unexpected translated content: got %q want %q", got, want)
 	}
 }
 
@@ -97,9 +114,12 @@ func TestExecuteWindowsProfileBackupFailsWhenPasswordEmpty(t *testing.T) {
 
 	fakeExec := &fakeSystem{runCapture: map[string]string{}}
 	rulesDir := t.TempDir()
-	fakeExec.runCapture["wslpath -w "+filepath.Join(rulesDir, "windows.include.daily.txt")] = "C:\\rules\\windows.include.daily.txt"
+	includePath := filepath.Join(rulesDir, "includes.daily.txt")
+	if err := os.WriteFile(includePath, []byte("/mnt/c/Users/daily/Data\n"), 0o644); err != nil {
+		t.Fatalf("write include file: %v", err)
+	}
 
-	err := executeWindowsProfileBackup(context.Background(), []string{"--repo", `C:\repo`, "backup", "--files-from", filepath.Join(rulesDir, "windows.include.daily.txt")}, false, fakeExec)
+	err := executeWindowsProfileBackup(context.Background(), []string{"--repo", `C:\repo`, "backup", "--files-from", includePath}, false, fakeExec)
 	if err == nil {
 		t.Fatalf("expected error")
 	}
@@ -132,8 +152,8 @@ func TestExecuteWindowsProfileBackupRunsElevatedViaPowerShell(t *testing.T) {
 
 	fakeExec := &fakeSystem{runCapture: map[string]string{}}
 	rulesDir := t.TempDir()
-	includePath := filepath.Join(rulesDir, "windows.include.daily.txt")
-	if err := os.WriteFile(includePath, []byte("C:\\Users\\daily\\Data\n"), 0o644); err != nil {
+	includePath := filepath.Join(rulesDir, "includes.daily.txt")
+	if err := os.WriteFile(includePath, []byte("/mnt/c/Users/daily/Data\n"), 0o644); err != nil {
 		t.Fatalf("write include file: %v", err)
 	}
 
@@ -193,5 +213,9 @@ func TestExecuteWindowsProfileBackupRunsElevatedViaPowerShell(t *testing.T) {
 	passwordPath := filepath.Join(elevatedWindowsTempDir, "wsl-backup-orchestrator-password-111.txt")
 	if _, statErr := os.Stat(passwordPath); !os.IsNotExist(statErr) {
 		t.Fatalf("expected elevated temporary password file cleanup, stat err=%v", statErr)
+	}
+	rulePath := filepath.Join(elevatedWindowsTempDir, "wsl-backup-orchestrator-rule-111.txt")
+	if _, statErr := os.Stat(rulePath); !os.IsNotExist(statErr) {
+		t.Fatalf("expected elevated temporary rule file cleanup, stat err=%v", statErr)
 	}
 }

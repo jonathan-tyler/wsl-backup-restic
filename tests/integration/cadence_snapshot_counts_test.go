@@ -205,7 +205,7 @@ func matchesAnyExcludeRule(filePath string, patterns []string) bool {
 func writeIncludeRuleSet(t *testing.T, rulesDir string, cadence string, include []string) {
 	t.Helper()
 
-	includePath := filepath.Join(rulesDir, fmt.Sprintf("wsl.include.%s.txt", cadence))
+	includePath := filepath.Join(rulesDir, fmt.Sprintf("includes.%s.txt", cadence))
 
 	includeContent := strings.Join(include, "\n")
 	if len(include) > 0 {
@@ -221,7 +221,7 @@ func writeIncludeRuleSet(t *testing.T, rulesDir string, cadence string, include 
 func writeExcludeRules(t *testing.T, rulesDir string, exclude []string) {
 	t.Helper()
 
-	excludePath := filepath.Join(rulesDir, "wsl.exclude.txt")
+	excludePath := filepath.Join(rulesDir, "excludes.txt")
 	excludeContent := strings.Join(exclude, "\n")
 	if len(exclude) > 0 {
 		excludeContent += "\n"

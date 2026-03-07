@@ -15,13 +15,14 @@ Thin, predictable wrapper around `restic`, run from WSL and usable as a `wsl-sys
 - Starter config: [config.example.yaml](config.example.yaml)
 - Rule file directory: `~/.config/wsl-backup/`
 - Rule naming:
-  - Include: `<profile>.include.<daily|weekly|monthly>.txt`
-  - Exclude: `<profile>.exclude.txt`
+  - Include: `includes.<daily|weekly|monthly>.txt`
+  - Exclude: `excludes.txt`
   - Cadence inheritance is cumulative:
     - `daily` uses `*.daily.txt`
     - `weekly` uses `*.daily.txt` + `*.weekly.txt`
     - `monthly` uses `*.daily.txt` + `*.weekly.txt` + `*.monthly.txt`
-  - Include rules are checked for filesystem overlap
+  - Include and exclude rules are authored from the WSL path perspective
+  - Windows runs translate rule entries that start with `/mnt/<drive>/` into `X:\...` before invoking `restic.exe`
   - Profile repositories are normalized and must be unique (for example, `/mnt/c/backups/repo` and `C:\\backups\\repo` are treated as the same target)
 
 ## Authentication
@@ -74,8 +75,7 @@ wsl-backup run daily
 
 - Missing rules behavior:
   - Missing include rule files fail fast for all inherited cadences.
-  - Missing exclude rule file (`<profile>.exclude.txt`) fails fast.
-  - Overlap across profiles in include rules fails fast.
+  - Missing exclude rule file (`excludes.txt`) fails fast.
 
 - `wsl-backup restore <target> --dry-run` passes `--dry-run` to `restic restore` and performs a non-writing preview restore.
 - Additional restore args are forwarded after `--dry-run` (for example include/exclude filters).

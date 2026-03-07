@@ -27,12 +27,12 @@ func TestFileDirAndPath(t *testing.T) {
 
 func TestIncludeAndExcludeRulesPath(t *testing.T) {
 	include := IncludeRulesPath("/tmp/wsl-backup", "wsl", "daily")
-	exclude := ExcludeRulesPath("/tmp/wsl-backup", "windows")
+	exclude := ExcludeRulesPath("/tmp/wsl-backup")
 
-	if include != filepath.Join("/tmp/wsl-backup", "wsl.include.daily.txt") {
+	if include != filepath.Join("/tmp/wsl-backup", "includes.daily.txt") {
 		t.Fatalf("unexpected include path: %q", include)
 	}
-	if exclude != filepath.Join("/tmp/wsl-backup", "windows.exclude.txt") {
+	if exclude != filepath.Join("/tmp/wsl-backup", "excludes.txt") {
 		t.Fatalf("unexpected exclude path: %q", exclude)
 	}
 }

@@ -77,10 +77,6 @@ func HandleWith(ctx context.Context, args []string, runner restic.Executor, deps
 		return err
 	}
 
-	if err := validateIncludeRuleOverlap(cfg.Dir(), cadence, cfg.Profiles, os.ReadFile); err != nil {
-		return err
-	}
-
 	if err := runPreflight(ctx, cfg, cadence, cfg.Profiles, deps.Stat, runner, deps.System, deps.Confirm); err != nil {
 		return err
 	}

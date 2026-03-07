@@ -3,9 +3,9 @@ package config
 import "path/filepath"
 
 func IncludeRulesPath(configDir string, profile string, cadence string) string {
-	return filepath.Join(configDir, profile+".include."+cadence+".txt")
+	return filepath.Join(configDir, "includes."+cadence+".txt")
 }
 
-func ExcludeRulesPath(configDir string, profile string) string {
-	return filepath.Join(configDir, profile+".exclude.txt")
+func ExcludeRulesPath(configDir string) string {
+	return filepath.Join(configDir, "excludes.txt")
 }

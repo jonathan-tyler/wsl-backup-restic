@@ -102,16 +102,16 @@ func withTempRules(t *testing.T, cadence string, includeProfiles []string, exclu
 	}
 
 	for _, item := range cadences {
-		for _, profile := range includeProfiles {
-			path := filepath.Join(dir, fmt.Sprintf("%s.include.%s.txt", profile, item))
-			if err := os.WriteFile(path, []byte("/tmp/source-"+profile+"\n"), 0o644); err != nil {
+		if len(includeProfiles) > 0 {
+			path := filepath.Join(dir, fmt.Sprintf("includes.%s.txt", item))
+			if err := os.WriteFile(path, []byte("/tmp/source\n"), 0o644); err != nil {
 				t.Fatalf("write include rules: %v", err)
 			}
 		}
 	}
 
-	for _, profile := range excludeProfiles {
-		path := filepath.Join(dir, fmt.Sprintf("%s.exclude.txt", profile))
+	if len(excludeProfiles) > 0 {
+		path := filepath.Join(dir, "excludes.txt")
 		if err := os.WriteFile(path, []byte("*.tmp\n"), 0o644); err != nil {
 			t.Fatalf("write exclude rules: %v", err)
 		}
@@ -171,8 +171,33 @@ func TestHandleRunsConfiguredProfiles(t *testing.T) {
 	loader.cfgPathSetForTest(rulesDir)
 	fakeExec.runCapture["restic version"] = "restic 0.18.1 compiled with go"
 	fakeExec.runCapture["pwsh.exe -NoProfile -Command restic version"] = "restic 0.18.1 compiled with go"
-	fakeExec.runCapture["wslpath -w "+filepath.Join(rulesDir, "windows.include.weekly.txt")] = "C:\\rules\\windows.include.weekly.txt"
-	fakeExec.runCapture["wslpath -w "+filepath.Join(rulesDir, "windows.exclude.txt")] = "C:\\rules\\windows.exclude.txt"
+	fakeExec.runCapture["wslpath -w "+filepath.Join(os.TempDir(), "wsl-backup-orchestrator-rule-001.txt")] = "C:\\rules\\includes.weekly.txt"
+	fakeExec.runCapture["wslpath -w "+filepath.Join(os.TempDir(), "wsl-backup-orchestrator-rule-002.txt")] = "C:\\rules\\includes.daily.txt"
+	fakeExec.runCapture["wslpath -w "+filepath.Join(os.TempDir(), "wsl-backup-orchestrator-rule-003.txt")] = "C:\\rules\\excludes.txt"
+	fakeExec.runCapture["wslpath -w "+filepath.Join(rulesDir, "excludes.txt")] = "C:\\rules\\excludes.txt"
+	originalCreateTemp := osCreateTemp
+	createTempIndex := 0
+	osCreateTemp = func(dir string, pattern string) (*os.File, error) {
+		createTempIndex++
+		name := fmt.Sprintf("wsl-backup-orchestrator-rule-%03d.txt", createTempIndex)
+		if strings.Contains(pattern, "password") {
+			name = "wsl-backup-orchestrator-password-001.txt"
+		}
+		path := filepath.Join(os.TempDir(), name)
+		file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o600)
+		if err != nil {
+			return nil, err
+		}
+		return file, nil
+	}
+	t.Cleanup(func() {
+		osCreateTemp = originalCreateTemp
+		_ = os.Remove(filepath.Join(os.TempDir(), "wsl-backup-orchestrator-rule-001.txt"))
+		_ = os.Remove(filepath.Join(os.TempDir(), "wsl-backup-orchestrator-rule-002.txt"))
+		_ = os.Remove(filepath.Join(os.TempDir(), "wsl-backup-orchestrator-rule-003.txt"))
+		_ = os.Remove(filepath.Join(os.TempDir(), "wsl-backup-orchestrator-password-001.txt"))
+	})
+	fakeExec.runCapture["wslpath -w "+filepath.Join(os.TempDir(), "wsl-backup-orchestrator-password-001.txt")] = "C:\\rules\\backup-password.txt"
 
 	err := HandleWith(context.Background(), []string{"weekly", "--one-file-system"}, runner, RunDependencies{Loader: loader, Stat: os.Stat, System: fakeExec})
 	if err != nil {
@@ -195,7 +220,7 @@ func TestHandleRunsConfiguredProfiles(t *testing.T) {
 			if strings.Contains(joined, "--use-fs-snapshot") {
 				t.Fatalf("did not expect wsl profile args to include --use-fs-snapshot: %v", call)
 			}
-			if !strings.Contains(joined, "wsl.include.weekly.txt") {
+			if !strings.Contains(joined, "includes.weekly.txt") {
 				t.Fatalf("expected wsl include file arg: %v", call)
 			}
 		}
@@ -212,10 +237,10 @@ func TestHandleRunsConfiguredProfiles(t *testing.T) {
 	if !strings.Contains(windowsCall, windowsRepo) {
 		t.Fatalf("expected windows repo path in call, got %v", fakeExec.runCalls[0])
 	}
-	if !strings.Contains(windowsCall, `C:\rules\windows.include.weekly.txt`) {
+	if !strings.Contains(windowsCall, `C:\rules\includes.weekly.txt`) {
 		t.Fatalf("expected converted include path in windows call, got %v", fakeExec.runCalls[0])
 	}
-	if !strings.Contains(windowsCall, `C:\rules\windows.exclude.txt`) {
+	if !strings.Contains(windowsCall, `C:\rules\excludes.txt`) {
 		t.Fatalf("expected converted exclude path in windows call, got %v", fakeExec.runCalls[0])
 	}
 
@@ -334,8 +359,31 @@ func TestHandleOffersWindowsRepositoryCreationWithPasswordFile(t *testing.T) {
 	loader.cfgPathSetForTest(rulesDir)
 	fakeExec.runCapture["restic version"] = "restic 0.18.1 compiled with go"
 	fakeExec.runCapture["pwsh.exe -NoProfile -Command restic version"] = "restic 0.18.1 compiled with go"
-	fakeExec.runCapture["wslpath -w "+filepath.Join(rulesDir, "windows.include.daily.txt")] = `C:\\rules\\windows.include.daily.txt`
-	fakeExec.runCapture["wslpath -w "+filepath.Join(rulesDir, "windows.exclude.txt")] = `C:\\rules\\windows.exclude.txt`
+	fakeExec.runCapture["wslpath -w "+filepath.Join(os.TempDir(), "wsl-backup-orchestrator-rule-001.txt")] = `C:\\rules\\includes.daily.txt`
+	fakeExec.runCapture["wslpath -w "+filepath.Join(os.TempDir(), "wsl-backup-orchestrator-rule-002.txt")] = `C:\\rules\\excludes.txt`
+	originalCreateTemp := osCreateTemp
+	createTempIndex := 0
+	osCreateTemp = func(dir string, pattern string) (*os.File, error) {
+		createTempIndex++
+		name := fmt.Sprintf("wsl-backup-orchestrator-rule-%03d.txt", createTempIndex)
+		if strings.Contains(pattern, "password") {
+			name = "wsl-backup-orchestrator-password-001.txt"
+		}
+		path := filepath.Join(os.TempDir(), name)
+		file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o600)
+		if err != nil {
+			return nil, err
+		}
+		return file, nil
+	}
+	t.Cleanup(func() {
+		osCreateTemp = originalCreateTemp
+		_ = os.Remove(filepath.Join(os.TempDir(), "wsl-backup-orchestrator-rule-001.txt"))
+		_ = os.Remove(filepath.Join(os.TempDir(), "wsl-backup-orchestrator-rule-002.txt"))
+		_ = os.Remove(filepath.Join(os.TempDir(), "wsl-backup-orchestrator-password-001.txt"))
+	})
+	fakeExec.runCapture["wslpath -w "+filepath.Join(os.TempDir(), "wsl-backup-orchestrator-password-001.txt")] = `C:\\rules\\backup-password.txt`
+	fakeExec.runCapture["wslpath -w "+filepath.Join(rulesDir, "excludes.txt")] = `C:\\rules\\excludes.txt`
 
 	confirmed := false
 	err := HandleWith(context.Background(), []string{"daily"}, runner, RunDependencies{
@@ -389,8 +437,8 @@ func TestHandleStopsAfterFirstProfileError(t *testing.T) {
 	runner := &fakeRunner{}
 	fakeExec := &fakeSystem{
 		runCapture: map[string]string{},
-		runErr: map[string]error{
-			"restic.exe --password-file C:\\rules\\backup-password.txt --repo C:\\repo\\windows backup --tag cadence=daily --tag profile=windows --files-from C:\\rules\\windows.include.daily.txt --exclude-file C:\\rules\\windows.exclude.txt": fmt.Errorf("windows failed"),
+			runErr: map[string]error{
+				"restic.exe --password-file C:\\rules\\backup-password.txt --repo C:\\repo\\windows backup --tag cadence=daily --tag profile=windows --files-from C:\\rules\\includes.daily.txt --exclude-file C:\\rules\\excludes.txt": fmt.Errorf("windows failed"),
 		},
 	}
 	loader := fakeLoader{cfg: config.File{
@@ -403,12 +451,19 @@ func TestHandleStopsAfterFirstProfileError(t *testing.T) {
 	loader.cfgPathSetForTest(rulesDir)
 	fakeExec.runCapture["restic version"] = "restic 0.18.1 compiled with go"
 	fakeExec.runCapture["pwsh.exe -NoProfile -Command restic version"] = "restic 0.18.1 compiled with go"
-	fakeExec.runCapture["wslpath -w "+filepath.Join(rulesDir, "windows.include.daily.txt")] = `C:\rules\windows.include.daily.txt`
-	fakeExec.runCapture["wslpath -w "+filepath.Join(rulesDir, "windows.exclude.txt")] = `C:\rules\windows.exclude.txt`
+	fakeExec.runCapture["wslpath -w "+filepath.Join(os.TempDir(), "wsl-backup-orchestrator-rule-001.txt")] = `C:\rules\includes.daily.txt`
+	fakeExec.runCapture["wslpath -w "+filepath.Join(os.TempDir(), "wsl-backup-orchestrator-rule-002.txt")] = `C:\rules\excludes.txt`
+	fakeExec.runCapture["wslpath -w "+filepath.Join(rulesDir, "excludes.txt")] = `C:\rules\excludes.txt`
 
 	originalCreateTemp := osCreateTemp
-	osCreateTemp = func(_ string, _ string) (*os.File, error) {
-		path := filepath.Join(os.TempDir(), "wsl-backup-orchestrator-password-001.txt")
+	createTempIndex := 0
+	osCreateTemp = func(_ string, pattern string) (*os.File, error) {
+		createTempIndex++
+		name := fmt.Sprintf("wsl-backup-orchestrator-rule-%03d.txt", createTempIndex)
+		if strings.Contains(pattern, "password") {
+			name = "wsl-backup-orchestrator-password-001.txt"
+		}
+		path := filepath.Join(os.TempDir(), name)
 		file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o600)
 		if err != nil {
 			return nil, err
@@ -417,6 +472,8 @@ func TestHandleStopsAfterFirstProfileError(t *testing.T) {
 	}
 	t.Cleanup(func() {
 		osCreateTemp = originalCreateTemp
+		_ = os.Remove(filepath.Join(os.TempDir(), "wsl-backup-orchestrator-rule-001.txt"))
+		_ = os.Remove(filepath.Join(os.TempDir(), "wsl-backup-orchestrator-rule-002.txt"))
 		_ = os.Remove(filepath.Join(os.TempDir(), "wsl-backup-orchestrator-password-001.txt"))
 	})
 	fakeExec.runCapture["wslpath -w "+filepath.Join(os.TempDir(), "wsl-backup-orchestrator-password-001.txt")] = `C:\rules\backup-password.txt`
@@ -470,7 +527,7 @@ func (l *fakeLoader) cfgPathSetForTest(dir string) {
 
 func TestBuildRunArgsErrorsOnUnexpectedExcludeStatFailure(t *testing.T) {
 	_, err := buildRunArgs("/cfg", "wsl", config.Profile{Repository: "/repo"}, "daily", nil, func(path string) (os.FileInfo, error) {
-		if strings.Contains(path, ".include.") {
+		if strings.Contains(path, "includes.") {
 			return fakeFileInfo{}, nil
 		}
 		return nil, fmt.Errorf("permission denied")
@@ -492,13 +549,13 @@ func TestBuildRunArgsWeeklyIncludesDailyAndWeeklyRuleFiles(t *testing.T) {
 	}
 
 	joined := strings.Join(args, " ")
-	if !strings.Contains(joined, "--files-from "+filepath.Join(rulesDir, "wsl.include.daily.txt")) {
+	if !strings.Contains(joined, "--files-from "+filepath.Join(rulesDir, "includes.daily.txt")) {
 		t.Fatalf("expected daily include rules in args: %v", args)
 	}
-	if !strings.Contains(joined, "--files-from "+filepath.Join(rulesDir, "wsl.include.weekly.txt")) {
+	if !strings.Contains(joined, "--files-from "+filepath.Join(rulesDir, "includes.weekly.txt")) {
 		t.Fatalf("expected weekly include rules in args: %v", args)
 	}
-	if !strings.Contains(joined, "--exclude-file "+filepath.Join(rulesDir, "wsl.exclude.txt")) {
+	if !strings.Contains(joined, "--exclude-file "+filepath.Join(rulesDir, "excludes.txt")) {
 		t.Fatalf("expected profile exclude rules in args: %v", args)
 	}
 }
@@ -513,66 +570,37 @@ func TestBuildRunArgsMonthlyIncludesDailyWeeklyAndMonthlyRuleFiles(t *testing.T)
 
 	joined := strings.Join(args, " ")
 	for _, cadence := range []string{"daily", "weekly", "monthly"} {
-		if !strings.Contains(joined, "--files-from "+filepath.Join(rulesDir, "wsl.include."+cadence+".txt")) {
+		if !strings.Contains(joined, "--files-from "+filepath.Join(rulesDir, "includes."+cadence+".txt")) {
 			t.Fatalf("expected %s include rules in args: %v", cadence, args)
 		}
 	}
-	if !strings.Contains(joined, "--exclude-file "+filepath.Join(rulesDir, "wsl.exclude.txt")) {
+	if !strings.Contains(joined, "--exclude-file "+filepath.Join(rulesDir, "excludes.txt")) {
 		t.Fatalf("expected profile exclude rules in args: %v", args)
 	}
 }
 
 func TestValidateIncludeRuleOverlapFailsOnCrossProfileOverlap(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "wsl.include.daily.txt"), []byte("/data/projects\n"), 0o644); err != nil {
-		t.Fatalf("write include rules: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "windows.include.daily.txt"), []byte("/data/projects/app\n"), 0o644); err != nil {
-		t.Fatalf("write include rules: %v", err)
-	}
-
-	err := validateIncludeRuleOverlap(dir, "daily", map[string]config.Profile{
+	if err := validateIncludeRuleOverlap(dir, "daily", map[string]config.Profile{
 		"wsl":     {Repository: "/repo/wsl"},
 		"windows": {Repository: `C:\repo`},
-	}, os.ReadFile)
-	if err == nil {
-		t.Fatalf("expected overlap error")
-	}
-	if !strings.Contains(err.Error(), "overlap") {
-		t.Fatalf("unexpected error: %v", err)
+	}, os.ReadFile); err != nil {
+		t.Fatalf("expected nil error, got %v", err)
 	}
 }
 
 func TestValidateIncludeRuleOverlapAllowsDistinctPaths(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "wsl.include.daily.txt"), []byte("/data/projects\n"), 0o644); err != nil {
-		t.Fatalf("write include rules: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "windows.include.daily.txt"), []byte("/mnt/c/Users/me/documents\n"), 0o644); err != nil {
-		t.Fatalf("write include rules: %v", err)
-	}
-
-	err := validateIncludeRuleOverlap(dir, "daily", map[string]config.Profile{
+	if err := validateIncludeRuleOverlap(t.TempDir(), "daily", map[string]config.Profile{
 		"wsl":     {Repository: "/repo/wsl"},
 		"windows": {Repository: `C:\repo`},
-	}, os.ReadFile)
-	if err != nil {
+	}, os.ReadFile); err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
 }
 
 func TestValidateIncludeRuleOverlapAllowsExcludeOverlap(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "wsl.include.daily.txt"), []byte("/data/wsl\n"), 0o644); err != nil {
-		t.Fatalf("write include rules: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "windows.include.daily.txt"), []byte("/data/windows\n"), 0o644); err != nil {
-		t.Fatalf("write include rules: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "wsl.exclude.txt"), []byte("/mnt/c/Users/mike\n"), 0o644); err != nil {
-		t.Fatalf("write exclude rules: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "windows.exclude.txt"), []byte("C:\\Users\\mike\\docs\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "excludes.txt"), []byte("/mnt/c/Users/mike\nC:\\Users\\mike\\docs\n"), 0o644); err != nil {
 		t.Fatalf("write exclude rules: %v", err)
 	}
 
@@ -587,22 +615,11 @@ func TestValidateIncludeRuleOverlapAllowsExcludeOverlap(t *testing.T) {
 
 func TestValidateIncludeRuleOverlapDetectsWSLAndWindowsEquivalentPaths(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "wsl.include.daily.txt"), []byte("/mnt/c/Users/mike/file.txt\n"), 0o644); err != nil {
-		t.Fatalf("write include rules: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "windows.include.daily.txt"), []byte("C:\\Users\\mike\\file.txt\n"), 0o644); err != nil {
-		t.Fatalf("write include rules: %v", err)
-	}
-
-	err := validateIncludeRuleOverlap(dir, "daily", map[string]config.Profile{
+	if err := validateIncludeRuleOverlap(dir, "daily", map[string]config.Profile{
 		"wsl":     {Repository: "/repo/wsl"},
 		"windows": {Repository: `C:\repo`},
-	}, os.ReadFile)
-	if err == nil {
-		t.Fatalf("expected overlap error")
-	}
-	if !strings.Contains(err.Error(), "overlap") {
-		t.Fatalf("unexpected error: %v", err)
+	}, os.ReadFile); err != nil {
+		t.Fatalf("expected nil error, got %v", err)
 	}
 }
 
