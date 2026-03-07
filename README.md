@@ -24,8 +24,9 @@ Thin, predictable wrapper around `restic`, run from WSL and usable as a `wsl-sys
     - `weekly` uses `*.daily.txt` + `*.weekly.txt`
     - `monthly` uses `*.daily.txt` + `*.weekly.txt` + `*.monthly.txt`
   - Include and exclude rules are authored from the WSL path perspective
+  - Configure local repository paths in WSL form (for example, `/mnt/c/backups/repo`)
   - WSL runs filter include entries that start with `/mnt/<drive>/` before invoking `restic`
-  - Windows runs translate rule entries that start with `/mnt/<drive>/` into `X:\...` before invoking `restic.exe`
+  - Windows runs translate local WSL paths, including rule entries and `--repo`, into `X:\...` before invoking `restic.exe`
   - Profile repositories are normalized and must be unique (for example, `/mnt/c/backups/repo` and `C:\\backups\\repo` are treated as the same target)
 
 ## Authentication

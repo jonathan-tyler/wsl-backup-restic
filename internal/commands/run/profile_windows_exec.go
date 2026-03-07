@@ -53,7 +53,12 @@ func executeWindowsProfileBackup(ctx context.Context, resticArgs []string, runEl
 }
 
 func runWindowsResticCommand(ctx context.Context, resticArgs []string, runElevated bool, exec system.Executor) error {
-	var err error
+	convertedArgs, err := prepareWindowsRepositoryArgs(ctx, resticArgs, exec)
+	if err != nil {
+		return err
+	}
+	resticArgs = convertedArgs
+
 	password := os.Getenv("RESTIC_PASSWORD")
 	if strings.TrimSpace(password) == "" {
 		password, err = loadWindowsProfilePassword(ctx)
@@ -90,6 +95,30 @@ func runWindowsResticCommand(ctx context.Context, resticArgs []string, runElevat
 
 	argsWithPassword := append([]string{"--password-file", passwordFile}, resticArgs...)
 	return exec.Run(ctx, "restic.exe", argsWithPassword...)
+}
+
+func prepareWindowsRepositoryArgs(ctx context.Context, args []string, exec system.Executor) ([]string, error) {
+	converted := append([]string{}, args...)
+
+	for index := 0; index < len(converted)-1; index++ {
+		if converted[index] != "--repo" {
+			continue
+		}
+
+		repository := converted[index+1]
+		if !looksLikeWSLWindowsMountPath(repository) {
+			continue
+		}
+
+		windowsPath, err := toWindowsPath(ctx, repository, exec)
+		if err != nil {
+			return nil, fmt.Errorf("convert repository path %q to windows path: %w", repository, err)
+		}
+
+		converted[index+1] = windowsPath
+	}
+
+	return converted, nil
 }
 
 func runElevatedWindowsRestic(ctx context.Context, resticExePath string, args []string, exec system.Executor) error {

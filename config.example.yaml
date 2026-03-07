@@ -13,6 +13,6 @@ profiles:
     repository: /path/to/restic-repo
 
   windows:
-    repository: C:\\path\\to\\restic-repo
+    repository: /mnt/c/path/to/restic-repo
     use_fs_snapshot: true
     # When enabled, wsl-backup runs through an elevated Windows process (UAC prompt).

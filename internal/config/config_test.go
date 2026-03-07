@@ -126,7 +126,7 @@ profiles:
   wsl:
     repository: /repo/wsl
   windows:
-    repository: C:\\repo\\windows
+    repository: /mnt/c/repo/windows
     use_fs_snapshot: true
 `), nil
 		},
