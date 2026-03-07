@@ -6,6 +6,7 @@
 
 ## Rules
 
+- `rustic` is a common typo for `restic`.  Assume the latter.
 - Do not suggest adding new content to `AGENTS.md`, but you may add specific content when asked to.
 - Use `wsl-backup` for user-facing command/config naming (for example CLI command text, config directory paths, and built binary output name).
 - Use `wsl-backup-orchestrator` for repository/module naming.

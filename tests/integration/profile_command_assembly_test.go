@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/jonathan-tyler/wsl-backup-orchestrator/internal/commands/run"
@@ -13,13 +14,20 @@ import (
 )
 
 type fakeRunner struct {
+	mu              sync.Mutex
 	calls           [][]string
 	includeContents []string
+	snapshotRepos   []string
 }
 
 func (f *fakeRunner) Run(_ context.Context, args ...string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.calls = append(f.calls, append([]string{}, args...))
 	for index := 0; index < len(args)-1; index++ {
+		if args[index] == "--repo" && len(args) > 0 && args[0] == "snapshots" {
+			f.snapshotRepos = append(f.snapshotRepos, args[index+1])
+		}
 		if args[index] != "--files-from" {
 			continue
 		}
@@ -41,18 +49,23 @@ func (l fakeLoader) Load() (config.File, error) {
 }
 
 type fakeSystem struct {
+	mu         sync.Mutex
 	runCalls   [][]string
 	runWithEnv []map[string]string
 	runCapture map[string]string
 }
 
 func (s *fakeSystem) Run(_ context.Context, name string, args ...string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.runCalls = append(s.runCalls, append([]string{name}, args...))
 	s.runWithEnv = append(s.runWithEnv, map[string]string{})
 	return nil
 }
 
 func (s *fakeSystem) RunWithEnv(_ context.Context, env map[string]string, name string, args ...string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.runCalls = append(s.runCalls, append([]string{name}, args...))
 	envCopy := map[string]string{}
 	for key, value := range env {
@@ -64,6 +77,8 @@ func (s *fakeSystem) RunWithEnv(_ context.Context, env map[string]string, name s
 
 func (s *fakeSystem) RunCapture(_ context.Context, name string, args ...string) (string, error) {
 	key := strings.Join(append([]string{name}, args...), " ")
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if name == "wslpath" && len(args) == 2 && args[0] == "-w" {
 		if out, ok := s.runCapture[key]; ok {
 			return out, nil
@@ -136,8 +151,8 @@ func TestRunAssemblesProfileCommandsForWSLAndWindows(t *testing.T) {
 		t.Fatalf("expected nil error, got %v", err)
 	}
 
-	if len(runner.calls) != 1 {
-		t.Fatalf("expected 1 wsl runner call, got %d", len(runner.calls))
+	if len(runner.calls) != 3 {
+		t.Fatalf("expected 3 runner calls (wsl backup + 2 snapshots), got %d", len(runner.calls))
 	}
 	if len(exec.runCalls) != 1 {
 		t.Fatalf("expected 1 windows system call, got %d", len(exec.runCalls))
@@ -159,4 +174,22 @@ func TestRunAssemblesProfileCommandsForWSLAndWindows(t *testing.T) {
 	if runner.includeContents[0] != "\n" {
 		t.Fatalf("expected staged wsl include content to filter mounted windows paths, got %q", runner.includeContents[0])
 	}
+	if len(runner.snapshotRepos) != 2 {
+		t.Fatalf("expected 2 snapshots repo calls, got %d", len(runner.snapshotRepos))
+	}
+	if !containsString(runner.snapshotRepos, wslRepo) {
+		t.Fatalf("expected wsl snapshots repo %q, got %v", wslRepo, runner.snapshotRepos)
+	}
+	if !containsString(runner.snapshotRepos, windowsRepo) {
+		t.Fatalf("expected windows snapshots repo %q, got %v", windowsRepo, runner.snapshotRepos)
+	}
+}
+
+func containsString(items []string, target string) bool {
+	for _, item := range items {
+		if item == target {
+			return true
+		}
+	}
+	return false
 }

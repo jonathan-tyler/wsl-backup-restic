@@ -5,6 +5,8 @@ Thin, predictable wrapper around `restic`, run from WSL and usable as a `wsl-sys
 ## What it does
 
 - Runs from WSL and targets cross-platform backup flows (WSL + Windows)
+- Runs configured profile backups concurrently after preflight completes
+- Prints `restic snapshots` for each configured repository after all backups finish successfully
 - Checks for matching `restic` versions on WSL (via `dnf`) and Windows (via `scoop`), and offers to install/upgrade when mismatched or missing
 - Supports *cadences* of `daily`, `weekly`, and `monthly` for backup and reporting commands
 

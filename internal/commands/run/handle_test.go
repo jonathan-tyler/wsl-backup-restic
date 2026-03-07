@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -14,13 +15,22 @@ import (
 )
 
 type fakeRunner struct {
+	mu    sync.Mutex
 	calls [][]string
 	err   error
+	runFn func(context.Context, []string) error
 }
 
-func (f *fakeRunner) Run(_ context.Context, args ...string) error {
+func (f *fakeRunner) Run(ctx context.Context, args ...string) error {
+	f.mu.Lock()
 	f.calls = append(f.calls, append([]string{}, args...))
-	return f.err
+	runFn := f.runFn
+	err := f.err
+	f.mu.Unlock()
+	if runFn != nil {
+		return runFn(ctx, append([]string{}, args...))
+	}
+	return err
 }
 
 type fakeLoader struct {
@@ -29,35 +39,51 @@ type fakeLoader struct {
 }
 
 type fakeSystem struct {
+	mu         sync.Mutex
 	runCalls   [][]string
 	runWithEnv []map[string]string
 	runCapture map[string]string
 	runErr     map[string]error
 	captureErr map[string]error
+	runFn      func(context.Context, []string) error
 }
 
-func (s *fakeSystem) Run(_ context.Context, name string, args ...string) error {
+func (s *fakeSystem) Run(ctx context.Context, name string, args ...string) error {
 	call := append([]string{name}, args...)
+	s.mu.Lock()
 	s.runCalls = append(s.runCalls, call)
 	s.runWithEnv = append(s.runWithEnv, map[string]string{})
-	if s.runErr != nil {
-		if err, ok := s.runErr[strings.Join(call, " ")]; ok {
+	runFn := s.runFn
+	runErr := s.runErr
+	s.mu.Unlock()
+	if runFn != nil {
+		return runFn(ctx, append([]string{}, call...))
+	}
+	if runErr != nil {
+		if err, ok := runErr[strings.Join(call, " ")]; ok {
 			return err
 		}
 	}
 	return nil
 }
 
-func (s *fakeSystem) RunWithEnv(_ context.Context, env map[string]string, name string, args ...string) error {
+func (s *fakeSystem) RunWithEnv(ctx context.Context, env map[string]string, name string, args ...string) error {
 	call := append([]string{name}, args...)
+	s.mu.Lock()
 	s.runCalls = append(s.runCalls, call)
 	envCopy := map[string]string{}
 	for key, value := range env {
 		envCopy[key] = value
 	}
 	s.runWithEnv = append(s.runWithEnv, envCopy)
-	if s.runErr != nil {
-		if err, ok := s.runErr[strings.Join(call, " ")]; ok {
+	runFn := s.runFn
+	runErr := s.runErr
+	s.mu.Unlock()
+	if runFn != nil {
+		return runFn(ctx, append([]string{}, call...))
+	}
+	if runErr != nil {
+		if err, ok := runErr[strings.Join(call, " ")]; ok {
 			return err
 		}
 	}
@@ -66,19 +92,23 @@ func (s *fakeSystem) RunWithEnv(_ context.Context, env map[string]string, name s
 
 func (s *fakeSystem) RunCapture(_ context.Context, name string, args ...string) (string, error) {
 	key := strings.Join(append([]string{name}, args...), " ")
+	s.mu.Lock()
+	runCapture := s.runCapture
+	captureErr := s.captureErr
+	s.mu.Unlock()
 	if name == "wslpath" && len(args) == 2 && args[0] == "-w" {
-		if out, ok := s.runCapture[key]; ok {
+		if out, ok := runCapture[key]; ok {
 			return out, nil
 		}
 		return "C:\\converted\\path", nil
 	}
-	if s.captureErr != nil {
-		if err, ok := s.captureErr[key]; ok {
+	if captureErr != nil {
+		if err, ok := captureErr[key]; ok {
 			return "", err
 		}
 	}
-	if s.runCapture != nil {
-		if out, ok := s.runCapture[key]; ok {
+	if runCapture != nil {
+		if out, ok := runCapture[key]; ok {
 			return out, nil
 		}
 	}
@@ -204,8 +234,8 @@ func TestHandleRunsConfiguredProfiles(t *testing.T) {
 		t.Fatalf("expected nil error, got %v", err)
 	}
 
-	if len(runner.calls) != 1 {
-		t.Fatalf("expected 1 wsl profile run via restic runner, got %d", len(runner.calls))
+	if len(runner.calls) != 3 {
+		t.Fatalf("expected 3 restic runner calls (wsl backup + 2 snapshots), got %d", len(runner.calls))
 	}
 
 	if len(fakeExec.runCalls) != 1 {
@@ -213,9 +243,11 @@ func TestHandleRunsConfiguredProfiles(t *testing.T) {
 	}
 
 	hasWSL := false
+	hasWindowsSnapshots := false
+	hasWSLSnapshots := false
 	for _, call := range runner.calls {
 		joined := strings.Join(call, " ")
-		if strings.Contains(joined, wslRepo) {
+		if strings.Contains(joined, wslRepo) && strings.Contains(joined, " backup ") {
 			hasWSL = true
 			if strings.Contains(joined, "--use-fs-snapshot") {
 				t.Fatalf("did not expect wsl profile args to include --use-fs-snapshot: %v", call)
@@ -226,7 +258,15 @@ func TestHandleRunsConfiguredProfiles(t *testing.T) {
 		}
 
 		if !strings.Contains(joined, "--one-file-system") {
-			t.Fatalf("expected passthrough restic args: %v", call)
+			if strings.Contains(joined, " backup ") {
+				t.Fatalf("expected passthrough restic args: %v", call)
+			}
+		}
+		if strings.HasPrefix(joined, "snapshots --repo "+wslRepo) {
+			hasWSLSnapshots = true
+		}
+		if strings.HasPrefix(joined, "snapshots --repo "+windowsRepo) {
+			hasWindowsSnapshots = true
 		}
 	}
 
@@ -246,6 +286,12 @@ func TestHandleRunsConfiguredProfiles(t *testing.T) {
 
 	if !hasWSL {
 		t.Fatalf("expected wsl profile to run")
+	}
+	if !hasWSLSnapshots {
+		t.Fatalf("expected wsl snapshots command to run")
+	}
+	if !hasWindowsSnapshots {
+		t.Fatalf("expected windows snapshots command to run via WSL restic")
 	}
 }
 
@@ -429,7 +475,7 @@ func TestHandleFailsWhenLoaderFails(t *testing.T) {
 	}
 }
 
-func TestHandleStopsAfterFirstProfileError(t *testing.T) {
+func TestHandleReturnsProfileErrorWhenOneConcurrentRunFails(t *testing.T) {
 	t.Setenv("RESTIC_PASSWORD", "test-password")
 
 	rulesDir := withTempRules(t, "daily", []string{"wsl", "windows"}, []string{"wsl", "windows"})
@@ -485,8 +531,117 @@ func TestHandleStopsAfterFirstProfileError(t *testing.T) {
 	if !strings.Contains(err.Error(), "profile windows") {
 		t.Fatalf("expected windows profile error, got %v", err)
 	}
-	if len(runner.calls) != 0 {
-		t.Fatalf("expected wsl profile not to run after windows error, got %d calls", len(runner.calls))
+	if len(runner.calls) > 1 {
+		t.Fatalf("expected no snapshot phase after backup failure, got %d runner calls", len(runner.calls))
+	}
+}
+
+func TestHandleRunsProfilesConcurrently(t *testing.T) {
+	t.Setenv("RESTIC_PASSWORD", "test-password")
+
+	rulesDir := withTempRules(t, "daily", []string{"wsl", "windows"}, []string{"wsl", "windows"})
+	wslRepo := withTempRepository(t)
+	windowsRepo := withTempRepository(t)
+	runnerStarted := make(chan struct{}, 1)
+	windowsStarted := make(chan struct{}, 1)
+	snapshotsStarted := make(chan struct{}, 1)
+	release := make(chan struct{})
+
+	runner := &fakeRunner{runFn: func(_ context.Context, args []string) error {
+		if len(args) > 0 && args[0] == "snapshots" {
+			select {
+			case snapshotsStarted <- struct{}{}:
+			default:
+			}
+			return nil
+		}
+		select {
+		case runnerStarted <- struct{}{}:
+		default:
+		}
+		<-release
+		return nil
+	}}
+	fakeExec := &fakeSystem{
+		runCapture: map[string]string{},
+		runFn: func(_ context.Context, call []string) error {
+			if len(call) > 0 && call[0] == "restic.exe" {
+				select {
+				case windowsStarted <- struct{}{}:
+				default:
+				}
+				<-release
+			}
+			return nil
+		},
+	}
+	loader := fakeLoader{cfg: config.File{
+		ResticVersion: "0.18.1",
+		Profiles: map[string]config.Profile{
+			"windows": {Repository: windowsRepo, UseFSSnapshot: false},
+			"wsl":     {Repository: wslRepo, UseFSSnapshot: false},
+		},
+	}}
+	loader.cfgPathSetForTest(rulesDir)
+	fakeExec.runCapture["restic version"] = "restic 0.18.1 compiled with go"
+	fakeExec.runCapture["pwsh.exe -NoProfile -Command restic version"] = "restic 0.18.1 compiled with go"
+	fakeExec.runCapture["wslpath -w "+filepath.Join(os.TempDir(), "wsl-backup-orchestrator-rule-001.txt")] = "C:\\rules\\includes.daily.txt"
+	fakeExec.runCapture["wslpath -w "+filepath.Join(os.TempDir(), "wsl-backup-orchestrator-rule-002.txt")] = "C:\\rules\\excludes.txt"
+
+	originalCreateTemp := osCreateTemp
+	createTempIndex := 0
+	osCreateTemp = func(dir string, pattern string) (*os.File, error) {
+		createTempIndex++
+		name := fmt.Sprintf("wsl-backup-orchestrator-rule-%03d.txt", createTempIndex)
+		if strings.Contains(pattern, "password") {
+			name = "wsl-backup-orchestrator-password-001.txt"
+		}
+		path := filepath.Join(os.TempDir(), name)
+		file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o600)
+		if err != nil {
+			return nil, err
+		}
+		return file, nil
+	}
+	t.Cleanup(func() {
+		osCreateTemp = originalCreateTemp
+		_ = os.Remove(filepath.Join(os.TempDir(), "wsl-backup-orchestrator-rule-001.txt"))
+		_ = os.Remove(filepath.Join(os.TempDir(), "wsl-backup-orchestrator-rule-002.txt"))
+		_ = os.Remove(filepath.Join(os.TempDir(), "wsl-backup-orchestrator-password-001.txt"))
+	})
+	fakeExec.runCapture["wslpath -w "+filepath.Join(os.TempDir(), "wsl-backup-orchestrator-password-001.txt")] = "C:\\rules\\backup-password.txt"
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- HandleWith(context.Background(), []string{"daily"}, runner, RunDependencies{Loader: loader, Stat: os.Stat, System: fakeExec})
+	}()
+
+	select {
+	case <-windowsStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for windows profile to start")
+	}
+
+	select {
+	case <-runnerStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for wsl profile to start while windows was still running")
+	}
+
+	select {
+	case <-snapshotsStarted:
+		t.Fatal("snapshots phase started before backups were released")
+	default:
+	}
+
+	close(release)
+	if err := <-errCh; err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	select {
+	case <-snapshotsStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for snapshots phase after backups finished")
 	}
 }
 
@@ -518,6 +673,9 @@ func TestHandlePrintsProfilePrefix(t *testing.T) {
 	}
 	if !strings.Contains(output.String(), "[wsl]") {
 		t.Fatalf("expected profile prefix in output, got %q", output.String())
+	}
+	if !strings.Contains(output.String(), "[wsl snapshots]") {
+		t.Fatalf("expected snapshots prefix in output, got %q", output.String())
 	}
 }
 

@@ -47,6 +47,10 @@ func (s *snapshotSystem) RunCapture(_ context.Context, name string, args ...stri
 type snapshotRunner struct{}
 
 func (r *snapshotRunner) Run(_ context.Context, args ...string) error {
+	if len(args) > 0 && args[0] == "snapshots" {
+		return nil
+	}
+
 	repo, cadence, includeFiles, excludeFiles, err := parseBackupArgs(args)
 	if err != nil {
 		return err
