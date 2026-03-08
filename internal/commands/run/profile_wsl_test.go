@@ -45,6 +45,16 @@ func TestTranslateRuleFileContentForWSLFiltersWindowsIncludePaths(t *testing.T) 
 	}
 }
 
+func TestTranslateRuleFileContentForWSLHandlesPathsWithSpaces(t *testing.T) {
+	content := []byte("# comment\n/home/daily/My Data/report 2026.txt\n/mnt/c/Users/daily/My Docs/report 2026.txt\nC:\\Users\\daily\\My Docs\\report 2026.txt\nrelative path/with spaces.txt\n")
+
+	got := string(translateRuleFileContentForWSL(content, "--files-from"))
+	want := "# comment\n/home/daily/My Data/report 2026.txt\n\n\nrelative path/with spaces.txt\n"
+	if got != want {
+		t.Fatalf("unexpected translated content: got %q want %q", got, want)
+	}
+}
+
 func TestTranslateRuleFileContentForWSLKeepsExcludePatterns(t *testing.T) {
 	content := []byte("# comment\n/mnt/c/Users/daily/Data\nC:\\Users\\daily\\Docs\n*.tmp\n")
 

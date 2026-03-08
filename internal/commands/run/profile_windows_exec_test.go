@@ -160,6 +160,16 @@ func TestTranslateRuleFileContentForWindowsConvertsAndFiltersIncludePaths(t *tes
 	}
 }
 
+func TestTranslateRuleFileContentForWindowsHandlesPathsWithSpaces(t *testing.T) {
+	content := []byte("# comment\n/mnt/c/Users/daily/My Docs/report 2026.txt\n/home/daily/My Data/report 2026.txt\nrelative path/with spaces.txt\n")
+
+	got := string(translateRuleFileContentForWindows(content, "--files-from"))
+	want := "# comment\nC:\\Users\\daily\\My Docs\\report 2026.txt\n\nrelative path/with spaces.txt\n"
+	if got != want {
+		t.Fatalf("unexpected translated content: got %q want %q", got, want)
+	}
+}
+
 func TestTranslateRuleFileContentForWindowsKeepsExcludePatterns(t *testing.T) {
 	content := []byte("# comment\n/mnt/c/Users/daily/Data\n/tmp/wsl-only\n*.tmp\n")
 
@@ -329,5 +339,49 @@ func TestRunWindowsResticCommandConvertsWSLRepositoryPathForInit(t *testing.T) {
 	}
 	if strings.Contains(joined, "init --repo /mnt/c/repo") {
 		t.Fatalf("expected WSL repository path to be converted, got %v", fakeExec.runCalls[0])
+	}
+}
+
+func TestRunWindowsResticCommandConvertsWSLRepositoryPathWithSpacesForInit(t *testing.T) {
+	originalLoad := loadWindowsProfilePassword
+	loadWindowsProfilePassword = func(context.Context) (string, error) {
+		return "test-password", nil
+	}
+	t.Cleanup(func() {
+		loadWindowsProfilePassword = originalLoad
+	})
+
+	fakeExec := &fakeSystem{runCapture: map[string]string{}}
+	wslRepo := "/mnt/c/Backup Repo/Project Files"
+	fakeExec.runCapture["wslpath -w "+wslRepo] = `C:\Backup Repo\Project Files`
+	fakeExec.runCapture["wslpath -w "+filepath.Join(os.TempDir(), "wsl-backup-orchestrator-password-000.txt")] = "C:\\Temp\\wsl-backup-orchestrator-password-000.txt"
+
+	originalCreateTemp := osCreateTemp
+	osCreateTemp = func(_ string, pattern string) (*os.File, error) {
+		path := filepath.Join(os.TempDir(), "wsl-backup-orchestrator-password-000.txt")
+		file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o600)
+		if err != nil {
+			return nil, err
+		}
+		return file, nil
+	}
+	t.Cleanup(func() {
+		osCreateTemp = originalCreateTemp
+	})
+
+	err := runWindowsResticCommand(context.Background(), []string{"init", "--repo", wslRepo}, false, fakeExec)
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+
+	if len(fakeExec.runCalls) != 1 {
+		t.Fatalf("expected one run call, got %d", len(fakeExec.runCalls))
+	}
+	joined := strings.Join(fakeExec.runCalls[0], " ")
+	if !strings.Contains(joined, `init --repo C:\Backup Repo\Project Files`) && !strings.Contains(joined, `init --repo C:\\Backup Repo\\Project Files`) {
+		t.Fatalf("expected converted windows repository path with spaces, got %v", fakeExec.runCalls[0])
+	}
+	if strings.Contains(joined, "init --repo "+wslRepo) {
+		t.Fatalf("expected WSL repository path with spaces to be converted, got %v", fakeExec.runCalls[0])
 	}
 }
