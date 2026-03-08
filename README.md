@@ -47,7 +47,7 @@ Thin, predictable wrapper around `restic`, run from WSL and usable as a `wsl-sys
 - This CLI is WSL-only; run it from a WSL shell (not from native Windows or a Dev Container).
 
 - `wsl-backup run` performs a fast preflight check and fails fast on missing/mismatched restic versions.
-- Before starting any backup, `wsl-backup run` validates repository paths for `daily`, `weekly`, and `monthly` across configured profiles. Missing repositories are offered for creation up front; declining any creation prompt exits the run.
+- Before starting a backup, `wsl-backup run <cadence>` validates repository paths only for that cadence across configured profiles. Missing repositories for the selected cadence are offered for creation up front; declining any creation prompt exits the run.
 - If preflight fails, run `wsl-backup setup` to install/upgrade `restic` across configured profiles.
 
 ### Typical flow

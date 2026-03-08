@@ -12,7 +12,7 @@ func printUsage(out io.Writer) {
   wsl-backup restore <target> [--dry-run] [restic-args...]
 
 Commands:
-  run      Run all configured profiles for a cadence (preflight validates all cadence repos; extra args pass to restic backup, e.g. --dry-run)
+  run      Run all configured profiles for a cadence (preflight validates that cadence's repos; extra args pass to restic backup, e.g. --dry-run)
   setup    Install or align restic versions for configured profiles
   restore  Restore latest snapshot to a target directory
 

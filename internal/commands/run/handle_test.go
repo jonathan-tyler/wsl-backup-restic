@@ -600,12 +600,12 @@ func TestHandleOffersRepositoryCreation(t *testing.T) {
 	}
 }
 
-func TestHandleOffersInactiveCadenceRepositoryCreationUpFront(t *testing.T) {
+func TestHandleOnlyOffersCreationForRunCadence(t *testing.T) {
 	t.Setenv("RESTIC_PASSWORD", "test-password")
 
-	rulesDir := withTempRules(t, "daily", []string{"wsl"}, []string{"wsl"})
+	rulesDir := withTempRules(t, "monthly", []string{"wsl"}, []string{"wsl"})
 	runner := &fakeRunner{}
-	dailyRepo := withTempRepository(t)
+	dailyRepo := filepath.Join(t.TempDir(), "daily-missing-repo")
 	monthlyRepo := withTempRepository(t)
 	weeklyRepo := filepath.Join(t.TempDir(), "weekly-missing-repo")
 	loader := fakeLoader{cfg: config.File{
@@ -616,7 +616,7 @@ func TestHandleOffersInactiveCadenceRepositoryCreationUpFront(t *testing.T) {
 	loader.cfgPathSetForTest(rulesDir)
 
 	confirmedPrompts := []string{}
-	err := HandleWith(context.Background(), []string{"daily"}, runner, RunDependencies{
+	err := HandleWith(context.Background(), []string{"monthly"}, runner, RunDependencies{
 		Loader: loader,
 		Stat:   os.Stat,
 		Confirm: func(message string) (bool, error) {
@@ -627,61 +627,121 @@ func TestHandleOffersInactiveCadenceRepositoryCreationUpFront(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
-	if len(confirmedPrompts) != 1 {
-		t.Fatalf("expected one prompt for missing inactive cadence repository, got %d (%v)", len(confirmedPrompts), confirmedPrompts)
-	}
-	if !strings.Contains(confirmedPrompts[0], "cadence weekly") {
-		t.Fatalf("expected weekly cadence in prompt, got %q", confirmedPrompts[0])
+	if len(confirmedPrompts) != 0 {
+		t.Fatalf("expected no prompts for missing non-run cadence repositories, got %d (%v)", len(confirmedPrompts), confirmedPrompts)
 	}
 	if len(runner.calls) < 1 {
 		t.Fatalf("expected runner calls")
 	}
-	initCall := strings.Join(runner.calls[0], " ")
-	if !strings.Contains(initCall, "init --repo") || !strings.Contains(initCall, weeklyRepo) {
-		t.Fatalf("expected first runner call to initialize missing weekly repository, got %v", runner.calls[0])
+	for _, call := range runner.calls {
+		joined := strings.Join(call, " ")
+		if strings.Contains(joined, "init --repo") {
+			t.Fatalf("expected no init call for non-run cadence repositories, got %v", runner.calls)
+		}
 	}
 	backupCallSeen := false
 	for _, call := range runner.calls {
 		joined := strings.Join(call, " ")
-		if strings.Contains(joined, dailyRepo) && strings.Contains(joined, " backup ") {
+		if strings.Contains(joined, monthlyRepo) && strings.Contains(joined, " backup ") {
 			backupCallSeen = true
 		}
 	}
 	if !backupCallSeen {
-		t.Fatalf("expected daily backup to run after inactive cadence validation")
+		t.Fatalf("expected monthly backup to run without checking missing daily or weekly repositories")
 	}
 }
 
-func TestHandleExitsWhenInactiveCadenceRepositoryCreationDeclined(t *testing.T) {
+func TestHandlePromptsForMissingRunCadenceRepositoryOnly(t *testing.T) {
 	t.Setenv("RESTIC_PASSWORD", "test-password")
 
-	rulesDir := withTempRules(t, "daily", []string{"wsl"}, []string{"wsl"})
+	rulesDir := withTempRules(t, "monthly", []string{"wsl", "windows"}, []string{"wsl", "windows"})
 	runner := &fakeRunner{}
 	dailyRepo := withTempRepository(t)
-	monthlyRepo := withTempRepository(t)
-	weeklyRepo := filepath.Join(t.TempDir(), "weekly-missing-repo")
+	weeklyRepo := withTempRepository(t)
+	monthlyRepo := filepath.Join(t.TempDir(), "monthly-missing-repo")
+	fakeExec := &fakeSystem{runCapture: map[string]string{}}
 	loader := fakeLoader{cfg: config.File{
+		ResticVersion: "0.18.1",
 		Profiles: map[string]config.Profile{
-			"wsl": testProfileRepositories(dailyRepo, weeklyRepo, monthlyRepo),
+			"windows": func() config.Profile {
+				profile := testProfileRepositories(dailyRepo, weeklyRepo, `C:\missing\monthly-repo`)
+				profile.UseFSSnapshot = false
+				return profile
+			}(),
+			"wsl": func() config.Profile {
+				profile := testProfileRepositories(dailyRepo, weeklyRepo, monthlyRepo)
+				profile.UseFSSnapshot = false
+				return profile
+			}(),
 		},
 	}}
 	loader.cfgPathSetForTest(rulesDir)
+	fakeExec.runCapture["restic version"] = "restic 0.18.1 compiled with go"
+	fakeExec.runCapture["pwsh.exe -NoProfile -Command restic version"] = "restic 0.18.1 compiled with go"
+	fakeExec.runCapture["wslpath -w "+filepath.Join(os.TempDir(), "wsl-backup-orchestrator-rule-001.txt")] = `C:\rules\includes.monthly.txt`
+	fakeExec.runCapture["wslpath -w "+filepath.Join(os.TempDir(), "wsl-backup-orchestrator-rule-002.txt")] = `C:\rules\excludes.txt`
+	fakeExec.runCapture["wslpath -w "+filepath.Join(rulesDir, "excludes.txt")] = `C:\rules\excludes.txt`
 
-	err := HandleWith(context.Background(), []string{"daily"}, runner, RunDependencies{
+	originalCreateTemp := osCreateTemp
+	createTempIndex := 0
+	osCreateTemp = func(_ string, pattern string) (*os.File, error) {
+		createTempIndex++
+		name := fmt.Sprintf("wsl-backup-orchestrator-rule-%03d.txt", createTempIndex)
+		if strings.Contains(pattern, "password") {
+			name = "wsl-backup-orchestrator-password-001.txt"
+		}
+		path := filepath.Join(os.TempDir(), name)
+		file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o600)
+		if err != nil {
+			return nil, err
+		}
+		return file, nil
+	}
+	t.Cleanup(func() {
+		osCreateTemp = originalCreateTemp
+		_ = os.Remove(filepath.Join(os.TempDir(), "wsl-backup-orchestrator-rule-001.txt"))
+		_ = os.Remove(filepath.Join(os.TempDir(), "wsl-backup-orchestrator-rule-002.txt"))
+		_ = os.Remove(filepath.Join(os.TempDir(), "wsl-backup-orchestrator-password-001.txt"))
+	})
+	fakeExec.runCapture["wslpath -w "+filepath.Join(os.TempDir(), "wsl-backup-orchestrator-password-001.txt")] = `C:\rules\backup-password.txt`
+
+	confirmedPrompts := []string{}
+	err := HandleWith(context.Background(), []string{"monthly"}, runner, RunDependencies{
 		Loader: loader,
 		Stat:   os.Stat,
-		Confirm: func(string) (bool, error) {
-			return false, nil
+		System: fakeExec,
+		Confirm: func(message string) (bool, error) {
+			confirmedPrompts = append(confirmedPrompts, message)
+			return true, nil
 		},
 	})
-	if err == nil {
-		t.Fatalf("expected error")
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
 	}
-	if !strings.Contains(err.Error(), "profile wsl weekly repository missing") {
-		t.Fatalf("unexpected error: %v", err)
+	if len(confirmedPrompts) != 2 {
+		t.Fatalf("expected prompts for monthly repositories only, got %d (%v)", len(confirmedPrompts), confirmedPrompts)
 	}
-	if len(runner.calls) != 0 {
-		t.Fatalf("expected no runner calls when inactive cadence repository creation is declined, got %v", runner.calls)
+	for _, message := range confirmedPrompts {
+		if !strings.Contains(message, "cadence monthly") {
+			t.Fatalf("expected monthly cadence prompt, got %q", message)
+		}
+		if strings.Contains(message, "daily") || strings.Contains(message, "weekly") {
+			t.Fatalf("expected no daily/weekly prompt, got %q", message)
+		}
+	}
+	if len(runner.calls) == 0 {
+		t.Fatalf("expected wsl restic runner calls")
+	}
+	initCall := strings.Join(runner.calls[0], " ")
+	if !strings.Contains(initCall, "init --repo") || !strings.Contains(initCall, monthlyRepo) {
+		t.Fatalf("expected wsl monthly repository init, got %v", runner.calls[0])
+	}
+	if len(fakeExec.runCalls) == 0 {
+		t.Fatalf("expected windows init call")
+	}
+	windowsInit := strings.Join(fakeExec.runCalls[0], " ")
+	if !strings.Contains(windowsInit, "init") || !strings.Contains(windowsInit, `C:\missing\monthly-repo`) {
+		t.Fatalf("expected windows monthly repository init, got %v", fakeExec.runCalls[0])
 	}
 }
 

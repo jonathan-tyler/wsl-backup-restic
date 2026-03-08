@@ -30,48 +30,19 @@ func runPreflight(
 	}
 
 	if hasProfiles(profiles) {
-		if err := validateRepositoryUniquenessAllCadences(profiles); err != nil {
+		if err := validateRepositoryUniqueness(profiles, cadence); err != nil {
 			return err
 		}
 	}
 
-	for _, repositoryTarget := range repositoryTargetsForProfiles(profiles) {
-		if err := ensureRepositoryReady(ctx, repositoryTarget.profileName, repositoryTarget.profile, repositoryTarget.cadence, stat, runner, exec, confirm, passwordPrompt); err != nil {
+	for _, profileName := range sortedProfileNames(profiles) {
+		if err := ensureRepositoryReady(ctx, profileName, profiles[profileName], cadence, stat, runner, exec, confirm, passwordPrompt); err != nil {
 			return err
 		}
 	}
 
 	if hasProfiles(profiles) {
 		if err := ensureResticPassword(profiles, cadence, stat, passwordPrompt, false); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-type repositoryTarget struct {
-	profileName string
-	profile     config.Profile
-	cadence     string
-}
-
-func repositoryTargetsForProfiles(profiles map[string]config.Profile) []repositoryTarget {
-	profileNames := sortedProfileNames(profiles)
-	targets := make([]repositoryTarget, 0, len(profileNames)*3)
-	for _, profileName := range profileNames {
-		profile := profiles[profileName]
-		for _, cadence := range []string{"daily", "weekly", "monthly"} {
-			targets = append(targets, repositoryTarget{profileName: profileName, profile: profile, cadence: cadence})
-		}
-	}
-
-	return targets
-}
-
-func validateRepositoryUniquenessAllCadences(profiles map[string]config.Profile) error {
-	for _, cadence := range []string{"daily", "weekly", "monthly"} {
-		if err := validateRepositoryUniqueness(profiles, cadence); err != nil {
 			return err
 		}
 	}
