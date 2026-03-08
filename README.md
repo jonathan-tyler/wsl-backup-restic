@@ -1,56 +1,33 @@
 # WSL Backup Orchestrator
 
-Thin, predictable wrapper around `restic`, run from WSL and usable as a `wsl-sys-cli` extension.
+WSL-centeric backup orchestration CLI for Windows & WSL filesystems, using [restic](https://restic.github.io/).
 
 ## What it does
 
-- Runs from WSL and targets cross-platform backup flows (WSL + Windows)
-- Runs configured profile backups concurrently after preflight completes
-- Prints `restic snapshots` for each configured repository after all backups finish successfully
-- Checks for matching `restic` versions on WSL (via `dnf`) and Windows (via `scoop`), and offers to install/upgrade when mismatched or missing
+- Runs from WSL and concurrently performs cross-platform backups for WSL and Windows
 - Supports *cadences* of `daily`, `weekly`, and `monthly` for backup and reporting commands
+- Ensures match `restic` versions on WSL (via `dnf`) and Windows (via `scoop`)
 
 ## Configuration
 
-- Default config path: `${XDG_CONFIG_HOME:-~/.config}/wsl-backup/config.yaml`
-- Optional config override: `BACKUP_CONFIG=/path/to/config.yaml`
-- Starter config: [config.example.yaml](config.example.yaml)
-- Rule file directory: `~/.config/wsl-backup/`
-- Each profile must define `repositories.daily`, `repositories.weekly`, and `repositories.monthly`.
-- Rule naming:
-  - Include: `includes.<daily|weekly|monthly>.txt`
-  - Exclude: `excludes.txt`
-  - Cadence inheritance is cumulative:
-    - `daily` uses `*.daily.txt`
-    - `weekly` uses `*.daily.txt` + `*.weekly.txt`
-    - `monthly` uses `*.daily.txt` + `*.weekly.txt` + `*.monthly.txt`
-  - Include and exclude rules are authored from the WSL path perspective
-  - Configure per-cadence repository paths in WSL form (for example, `/mnt/c/backups/repo-daily`)
-  - WSL runs filter include entries that start with `/mnt/<drive>/` before invoking `restic`
-  - Windows runs translate local WSL paths, including rule entries and `--repo`, into `X:\...` before invoking `restic.exe`
-  - Profile repositories for the active cadence are normalized and must be unique (for example, `/mnt/c/backups/repo` and `C:\backups\repo` are treated as the same target)
+- Copy [config.example.yaml](config.example.yaml) to `~/.config/wsl-backup/config.yaml` and customize as needed.
+- Each cadence-based "includes" rule file inherits from the previous cadence(s) and is cumulative
+- All paths are expected to be from the WSL path perspective
 
-## Authentication
+### Authentication
 
 - Restic password is a hard requirement.
 - Supported password sources (first available wins):
   - `RESTIC_PASSWORD` (direct value)
-  - `WSL_BACKUP_PASSWORD_FILE` (preferred password file path)
-  - `WSL_BACKUP_RESTIC_PASSWORD_FILE` (legacy alias)
   - `RESTIC_PASSWORD_FILE` (restic-compatible password file path)
   - systemd credentials directory (`$CREDENTIALS_DIRECTORY/restic_password`)
-- Manual `wsl-backup run ...` invocations prompt once for the password when a configured repository already exists and no password source is available. The prompt uses hidden terminal input and does not go through shell history. The entered value is exported to `RESTIC_PASSWORD` for the current process.
-- If no valid password source is available in non-interactive use, the command fails fast with an error.
+  - Manual `wsl-backup run ...` invocations via prompt once
 
 ## Usage
 
-- This CLI is WSL-only; run it from a WSL shell (not from native Windows or a Dev Container).
+The CLI is WSL-only; run it from a WSL shell.
 
-- `wsl-backup run` performs a fast preflight check and fails fast on missing/mismatched restic versions.
-- Before starting a backup, `wsl-backup run <cadence>` validates repository paths only for that cadence across configured profiles. Missing repositories for the selected cadence are offered for creation up front; declining any creation prompt exits the run.
-- If preflight fails, run `wsl-backup setup` to install/upgrade `restic` across configured profiles.
-
-### Typical flow
+Typical flow:
 
 ```sh
 # One-time (or when versions drift)
@@ -66,30 +43,6 @@ wsl-backup run daily --dry-run
 wsl-backup restore /tmp/restore-target
 wsl-backup restore /tmp/restore-target --dry-run
 ```
-
-### Edge cases
-
-- `BACKUP_CONFIG` overrides config discovery and points directly to a config file.
-
-```sh
-BACKUP_CONFIG=/path/to/config.yaml wsl-backup setup
-BACKUP_CONFIG=/path/to/config.yaml wsl-backup run daily
-
-# Optional password file override
-WSL_BACKUP_PASSWORD_FILE=/path/to/backup-password.txt \
-BACKUP_CONFIG=/path/to/config.yaml \
-wsl-backup run daily
-```
-
-- Missing rules behavior:
-  - Missing include rule files fail fast for all inherited cadences.
-  - Missing exclude rule file (`excludes.txt`) fails fast.
-
-- `wsl-backup run <cadence> --dry-run` passes `--dry-run` to `restic backup` for each configured profile and performs a non-writing preview. The follow-up `snapshots` listing remains read-only.
-- `wsl-backup restore <target> --dry-run` passes `--dry-run` to `restic restore` and performs a non-writing preview restore.
-- Additional restore args are forwarded after `--dry-run` (for example include/exclude filters).
-
-- If installed through `wsl-sys-cli`, run the same commands as `sys wsl-backup ...`.
 
 ## Caveats
 
