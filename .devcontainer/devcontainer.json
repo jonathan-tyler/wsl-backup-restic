@@ -17,19 +17,15 @@
     "workspaceFolder": "/workspace/linux/backup",
     "workspaceMount": "source=${localWorkspaceFolder}/../..,target=/workspace,type=bind",
     "mounts": [
-        "type=volume,target=/home/developer/.cache",
-        "type=volume,target=/home/developer/go",
-        // Host WSL backup config dir bind-mounted for real config editing/testing.
+        // ~/my/kb
+        "type=bind,source=${localEnv:HOME}/my/kb,target=/home/developer/kb",
+        // project
         "type=bind,source=${localEnv:HOME}/.config/wsl-backup,target=/home/developer/.config/wsl-backup",
-        "type=bind,source=${localEnv:HOME}/.agents,target=${containerWorkspaceFolder}/.agents",
-        // Use less restrictive agent allowances only inside dev containers
-        "type=bind,source=${localEnv:HOME}/.agents/skills/dev-containers/assets/settings.json,target=/home/developer/.vscode-server/data/Machine/settings.json",
-        // Mount shell history, then copy to allow it to grow within the container
-        "type=bind,source=${localEnv:HOME}/.agents/skills/dev-containers/assets/.zsh_history,target=/tmp/.zsh_history,readonly",
-        // Optional: personal starship configuration
-        "type=bind,source=${localEnv:HOME}/.config/starship.toml,target=/home/developer/.config/starship.toml,readonly"
+        // golang
+        "type=volume,target=/home/developer/.cache",
+        "type=volume,target=/home/developer/go"
     ],
-    "postCreateCommand": "[ -f /tmp/.zsh_history ] && cp /tmp/.zsh_history /home/developer/.zsh_history || true; mkdir -p ${containerWorkspaceFolder}/.agents/local-skills",
+    "postCreateCommand": "[ -f /tmp/.zsh_history ] && cp /tmp/.zsh_history /home/developer/.zsh_history || true",
     "customizations": {
         "vscode": {
             "extensions": [

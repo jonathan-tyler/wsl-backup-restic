@@ -1,6 +1,6 @@
 # WSL Backup Orchestrator
 
-WSL-centeric backup orchestration CLI for Windows & WSL filesystems, using [restic](https://restic.github.io/).
+WSL-centric backup orchestration CLI for Windows and WSL filesystems, using [restic](https://restic.github.io/).
 
 ## What it does
 
@@ -43,6 +43,20 @@ wsl-backup run daily --dry-run
 wsl-backup restore /tmp/restore-target
 wsl-backup restore /tmp/restore-target --dry-run
 ```
+
+## Build and Install
+
+The repo includes containerized build helpers that use rootless `podman` by default.
+
+```sh
+./scripts/build-in-container.sh
+./scripts/install.sh
+```
+
+- `build-in-container.sh` builds `out/wsl-backup` inside a Go container.
+- `install.sh` runs the same containerized build, installs the binary to `${HOME}/.local/bin/wsl-backup` by default, and scaffolds `${XDG_CONFIG_HOME:-$HOME/.config}/wsl-backup` if files are missing.
+- The installer copies `config.example.yaml` to `config.yaml` only when that file does not already exist, and it creates missing empty `includes.daily.txt`, `includes.weekly.txt`, `includes.monthly.txt`, and `excludes.txt` files without overwriting existing content.
+- Override `CONTAINER_ENGINE`, `GOOS`, `GOARCH`, `OUT_DIR`, `PREFIX`, `BINDIR`, or `CONFIG_DIR` when needed.
 
 ## Caveats
 
